@@ -127,6 +127,37 @@
     };
   }
 
+  async function loadVersions() {
+    const lists = await api.checklists();
+    return (await Promise.all(lists.map(list => api.versions(list.id)))).flat();
+  }
+
+  function versionField(parent, versions) {
+    const select = field(parent, "Версия чек-листа", "select");
+    versions.forEach(version => option(select, version.id, version.name + " · v" + version.version));
+    select.value = versions.at(-1)?.id || "";
+    return select;
+  }
+
+  async function track(item, read, panel, render) {
+    while (panel.isConnected) {
+      render(item);
+      if (item.status !== "queued" && item.status !== "running") return item;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      if (panel.isConnected) item = await read(item.id);
+    }
+  }
+
+  function jobStatus(item) {
+    return {
+      queued: "В очереди",
+      running: "В обработке",
+      completed: "Завершено",
+      completed_with_errors: "Завершено с ошибками",
+      failed: "Ошибка оценки"
+    }[item.status] || item.status;
+  }
+
   async function dialogs(view) {
     const toolbar = add(view, "section");
     toolbar.className = "cqa-toolbar";
@@ -153,19 +184,46 @@
       await refresh("DEMO");
     }).classList.add("cqa-secondary");
     await refresh();
+    const batchPanel = add(toolbar, "div");
+    add(batchPanel, "h3", "Пакетная оценка");
+    const batchVersion = versionField(batchPanel, await loadVersions());
+    const progress = add(batchPanel, "p");
+    progress.setAttribute("role", "status");
+    const errors = add(batchPanel, "ul");
+    button(batchPanel, "Оценить всю группу", async () => {
+      const group_id = group.value.trim();
+      if (!group_id) throw new Error("Введи идентификатор загруженной группы.");
+      progress.textContent = "";
+      errors.replaceChildren();
+      const batch = await api.startBatch({ group_id, checklist_version: batchVersion.value });
+      await track(batch, api.batch, batchPanel, item => {
+        progress.textContent = group_id + " · " + jobStatus(item) + " · " + item.progress + "% · готово " +
+          item.completed + " из " + item.total + " · ошибок " + item.failed;
+        errors.replaceChildren();
+        item.jobs.filter(job => job.status === "failed").forEach(job =>
+          add(errors, "li", job.conversation_id + " · " + job.error));
+      });
+    });
   }
 
   async function openDialog(details, id) {
-    const [record, lists, evaluations] = await Promise.all([api.conversation(id), api.checklists(), api.evaluations()]);
-    const versions = (await Promise.all(lists.map(list => api.versions(list.id)))).flat();
+    const [record, versions, evaluations] = await Promise.all([api.conversation(id), loadVersions(), api.evaluations()]);
     details.replaceChildren();
     const grid = add(details, "div");
     grid.className = "cqa-grid";
     const rows = transcript(add(grid, "section"), record);
     const review = add(grid, "section");
-    const versionSelect = field(review, "Версия чек-листа", "select");
-    versions.forEach(version => option(versionSelect, version.id, version.name + " · v" + version.version));
-    versionSelect.value = versions.at(-1)?.id || "";
+    const versionSelect = versionField(review, versions);
+    const progress = add(review, "p");
+    progress.setAttribute("role", "status");
+    button(review, "Запустить оценку ИИ", async () => {
+      progress.textContent = "";
+      const job = await api.startJob({ conversation_id: record.id, checklist_version: versionSelect.value });
+      const finished = await track(job, api.job, review, item => {
+        progress.textContent = jobStatus(item) + (item.error ? " · " + item.error : "");
+      });
+      if (finished?.status === "completed") show(await api.evaluation(finished.evaluation_id));
+    });
     const form = add(review, "div");
     const output = add(review, "div");
 
