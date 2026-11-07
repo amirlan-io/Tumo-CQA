@@ -1,4 +1,6 @@
 import express from 'express';
+import { fileURLToPath } from 'node:url';
+
 import { importRecords } from './import.js';
 import { fetchDataset } from './organizer.js';
 import { installChecklists, validateAnswers } from './checklists.js';
@@ -10,6 +12,8 @@ const text = value => typeof value === 'string' && value.trim().length > 0;
 export function createApp(store, organizer = {}) {
   const app = express();
   app.disable('x-powered-by');
+  app.use('/frontend', express.static(fileURLToPath(new URL('../frontend', import.meta.url))));
+
   app.use(express.json({ limit: '5mb' }));
   const get = (kind, id) => {
     const row = store.get(kind, id);

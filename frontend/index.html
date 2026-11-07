@@ -6,18 +6,19 @@
   <title>Freedom Broker · CQA</title>
   <link rel="stylesheet" href="./styles/cqa.css">
   <script defer src="./scripts/mock-data.js"></script>
-  <script defer src="./scripts/api.js"></script>
-  <script defer src="./scripts/app.js"></script>
+  <script defer src="./scripts/service.js"></script>
+  <script defer src="./scripts/workspace.js"></script>
 </head>
 <body>
   <main id="cqa-app">
-    <header><p>Freedom Broker · CQA / DEV</p><h1>Диалоги</h1></header>
-    <p role="status" id="cqa-status">Загружаем вымышленные данные…</p>
-    <div id="cqa-list"></div>
-    <div class="cqa-grid">
-      <section id="cqa-transcript" hidden></section>
-      <section id="cqa-result" hidden></section>
-    </div>
+    <header><p>Freedom Broker · CQA</p><h1>Оценка диалогов</h1></header>
+    <nav aria-label="Разделы">
+      <button type="button" data-page="dialogs">Диалоги</button>
+      <button type="button" data-page="checklists">Чек-листы</button>
+      <button type="button" data-page="appeals">Апелляции</button>
+    </nav>
+    <p id="cqa-status" role="status"></p>
+    <div id="cqa-content"></div>
   </main>
 </body>
 </html>
