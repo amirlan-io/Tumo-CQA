@@ -37,6 +37,15 @@ test('frontend served by backend launches real jobs and batches through service 
     await until(() => doc.body.textContent.includes('100%'));
     assert.equal(store.list('job').at(-1).cache_hit, true);
     assert.equal(store.list('evaluation').length, 2);
+    find('Чек-листы').click();
+    await until(() => find('Сохранить новую версию'));
+    const inputs = [...doc.querySelectorAll('textarea')];
+    inputs[0].value = 'Заменённый через интерфейс критерий';
+    find('Сохранить новую версию').click();
+    await until(() => store.list('checklist_version').length === 2);
+    assert.equal(store.list('checklist_version')[1].criteria[0].text, 'Заменённый через интерфейс критерий');
+    assert.notEqual(store.list('checklist_version')[0].criteria[0].text, 'Заменённый через интерфейс критерий');
+    assert.equal(store.list('evaluation')[0].checklist_version, store.list('checklist_version')[0].id);
   } finally {
     dom?.window.close();
     await new Promise(r => server.close(r)); store.db.close();

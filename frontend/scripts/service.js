@@ -17,6 +17,7 @@ window.CqaService = (() => {
     importGroup: group_id => request("import/organizer", { group_id }),
     importDemo: () => request("import", { group_id: "DEMO", records: window.CqaMock.records }),
     checklists: () => request("checklists"),
+    createChecklist: body => request('checklists', body),
     versions: id => request("checklists/" + id + "/versions"),
     saveVersion: (id, config) => request("checklists/" + id + "/versions", config),
     evaluate: body => request("evaluations", body),

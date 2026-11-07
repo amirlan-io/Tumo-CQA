@@ -243,6 +243,7 @@
       const version = versions.find(item => item.id === evaluation.checklist_version);
       add(output, "h2", "Итог · " + total(evaluation.final_score));
       add(output, "p", "Исходный итог · " + total(evaluation.original_score));
+      evaluation.decisions.forEach(d => add(output, 'p', 'Решение проверяющего · ' + d.criterion_id + ' · ' + (d.action === 'change' ? 'Изменено' : 'Подтверждено') + ' · ' + d.reason));
       add(output, "p", "Грубые ошибки · " + (evaluation.final_score.gross_error ? "Да" : "Нет"));
       evaluation.final_score.sections.forEach(section =>
         add(output, "p", section.section + " · " + (section.points ?? "—") + " / " + (section.maximum ?? "—")));
@@ -285,8 +286,13 @@
         const read = answerFields(card, criterion);
         const explanation = field(card, "Объяснение", "textarea");
         const numbers = field(card, "Номера реплик через запятую, включая проверенный участок");
+        const missed = field(card, 'Действие пропущено', 'input'); missed.type = 'checkbox';
+        const from = field(card, 'Начало проверенного участка (номер реплики)'); from.type = 'number'; from.min = 1;
+        const to = field(card, 'Конец проверенного участка (номер реплики)'); to.type = 'number'; to.min = 1;
         return () => ({
           ...read(),
+          missed_action: missed.checked,
+          checked_range: from.value || to.value ? { from: Number(from.value), to: Number(to.value) } : null,
           criterion_id: criterion.criterion_id,
           explanation: explanation.value.trim(),
           evidence_message_nos: numbers.value.trim() ? numbers.value.split(",").map(value => Number(value.trim())) : []
@@ -326,6 +332,14 @@
 
   async function checklists(view) {
     const lists = await api.checklists();
+    const createPanel = add(view, 'section');
+    add(createPanel, 'h2', 'Новый чек-лист');
+    const newName = field(createPanel, 'Название нового чек-листа');
+    button(createPanel, 'Создать на основе текущего', async () => {
+      if (!lists.length) throw new Error('Нет начального чек-листа');
+      await api.createChecklist({ ...lists[0].latest_version, name: newName.value });
+      await navigate('checklists');
+    });
     lists.forEach(list => {
       const panel = add(view, "section");
       const name = field(panel, "Название чек-листа", "input", list.latest_version.name);
@@ -397,6 +411,11 @@
     add(panel, "p", "Исходный ответ · " + answerText(appeal.original));
     add(panel, "p", appeal.original.explanation);
     evidence(panel, appeal.original.evidence_message_nos, rows);
+    if (appeal.original.checked_range) {
+      const range = appeal.original.checked_range;
+      add(panel, 'p', 'Проверенный участок: ' + range.from + '–' + range.to);
+      evidence(panel, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i), rows);
+    }
     add(panel, "p", "Текущий ответ · " + answerText(appeal.current));
     add(panel, "p", "Исходный итог · " + total(appeal.evaluation.original_score));
     add(panel, "p", "Текущий итог · " + total(appeal.evaluation.final_score));

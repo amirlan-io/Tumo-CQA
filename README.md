@@ -1,4 +1,6 @@
 # Tumo-CQA
+
+Актуальная сверка обязательных требований и границы проверки: [docs/tz-audit.md](docs/tz-audit.md).
 Tumo — Freedom Broker CQA (Conversation Quality Analytics) hackathon prototype
 
 ## Сервер: запуск

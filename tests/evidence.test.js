@@ -15,4 +15,8 @@ test('evidence quotes and checked ranges must refer to the actual transcript', (
   assert.throws(() => validateResults(conversation, version, invalidRange));
   const invalidQuote = structuredClone(answers); invalidQuote[0].evidence_quotes[0].quote = 'Выдуманная цитата';
   assert.throws(() => validateResults(conversation, version, invalidQuote));
+  const missing = structuredClone(answers); missing[0].evidence_message_nos = []; missing[0].checked_range = null;
+  assert.throws(() => validateResults(conversation, version, missing));
+  const missed = structuredClone(answers); missed[0].missed_action = true; missed[0].checked_range = null;
+  assert.throws(() => validateResults(conversation, version, missed));
 });

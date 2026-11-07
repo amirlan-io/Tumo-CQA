@@ -196,3 +196,4 @@ body { margin: 0; }
 #cqa-app .cqa-demo-controls button { margin:0; }
 @media(max-width:700px) { #cqa-app .cqa-import-controls { grid-template-columns:minmax(0,1fr); gap:20px; } }
 audio { display:block; width:100%; margin:16px 0; }
+ #cqa-app input[type="checkbox"] { width:20px; min-height:20px; accent-color:var(--cqa-green); }

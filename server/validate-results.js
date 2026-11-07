@@ -13,6 +13,10 @@ export function validateResults(conversation, version, results) {
         || (r.answer === 'na' && (!text(r.na_reason) || r.raw_score !== null)))
         throw fail('Неверный результат критерия');
       ids.add(r.criterion_id);
+      if (!r.evidence_message_nos.length && !r.checked_range)
+        throw fail('Нужны реплики-доказательства или проверенный участок');
+      if (r.missed_action === true && !r.checked_range)
+        throw fail('Для пропущенного действия нужен checked_range');
       if (r.checked_range != null) {
         const { from, to } = r.checked_range;
         if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to > conversation.transcript.length)
