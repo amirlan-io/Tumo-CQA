@@ -12,6 +12,7 @@ window.CqaService = (() => {
 
   return {
     conversations: () => request("conversations"),
+    importJson: body => request('import', body),
     conversation: id => request("conversations/" + id),
     importGroup: group_id => request("import/organizer", { group_id }),
     importDemo: () => request("import", { group_id: "DEMO", records: window.CqaMock.records }),

@@ -74,6 +74,11 @@
         link.href = audio;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
+        const player = add(parent, 'audio');
+        player.controls = true;
+        player.preload = 'none';
+        player.src = audio;
+        player.setAttribute('aria-label', 'Запись звонка');
       } else {
         add(parent, "p", "Запись недоступна.");
       }
@@ -149,6 +154,19 @@
     const evaluatePanel = add(controls, 'div');
     const demoPanel = add(toolbar, 'div'); demoPanel.className = 'cqa-demo-controls';
     const group = field(importPanel, "Идентификатор группы", "input", "DEV");
+    const upload = field(demoPanel, 'Загрузить транскрипт из JSON', 'input');
+    upload.type = 'file'; upload.accept = '.json,application/json';
+    button(demoPanel, 'Импортировать JSON', async () => {
+      const file = upload.files[0];
+      if (!file) throw new Error('Выберите JSON-файл');
+      if (file.size > 5 * 1024 * 1024) throw new Error('Файл должен быть не больше 5 МБ');
+      let data;
+      try { data = JSON.parse(await file.text()); } catch { throw new Error('Файл не содержит корректный JSON'); }
+      const records = Array.isArray(data) ? data : data.records ?? data.data?.records ?? [data];
+      const groupId = group.value.trim() || 'UPLOAD';
+      await api.importJson({ group_id: groupId, records });
+      await refresh(groupId);
+    });
     const summary = add(view, "div");
     summary.className = "cqa-summary";
     const list = add(view, "div");
@@ -239,6 +257,11 @@
         add(card, "p", original.explanation);
         if (result.na_reason) add(card, "p", "Причина N/A · " + result.na_reason);
         evidence(card, original.evidence_message_nos, rows);
+        if (original.checked_range) {
+          const range = original.checked_range;
+          evidence(card, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i), rows);
+          add(card, 'p', 'Проверенный участок: реплики ' + range.from + '–' + range.to);
+        }
         const appealForm = add(card, "details");
         add(appealForm, "summary", "Оспорить оценку");
         const comment = field(appealForm, "Комментарий к апелляции", "textarea");
