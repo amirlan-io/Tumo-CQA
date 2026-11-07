@@ -1,11 +1,13 @@
 import express from 'express';
+import { importRecords } from './import.js';
+import { fetchDataset } from './organizer.js';
 import { installChecklists, validateAnswers } from './checklists.js';
 import { evaluationView, applyDecisions } from './score.js';
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const text = value => typeof value === 'string' && value.trim().length > 0;
 
-export function createApp(store) {
+export function createApp(store, organizer = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '5mb' }));
@@ -18,25 +20,16 @@ export function createApp(store) {
   installChecklists(app, store, get);
   app.get('/api/conversations', (req, res) => res.json(store.list('conversation')));
   app.get('/api/conversations/:id', (req, res) => res.json(get('conversation', req.params.id)));
-  app.post('/api/import', (req, res) => {
-    const { group_id, records } = req.body;
-    if (!text(group_id) || !Array.isArray(records) || !records.length || records.length > 1000)
-      throw fail('Нужны group_id и массив records (1–1000 диалогов)');
-    for (const c of records) {
-      if (!text(c.conversation_id) || !['RU', 'KZ', 'EN'].includes(c.language)
-        || !['agent chat', 'voice call'].includes(c.channel)
-        || !Array.isArray(c.transcript) || !c.transcript.length
-        || c.transcript.some(m => !m || !['client', 'operator', 'bot', 'system'].includes(m.speaker)
-          || typeof m.text !== 'string' || !text(m.timestamp))) throw fail('Неверный формат диалога');
+  app.post('/api/import', (req, res) => res.status(201).json(importRecords(store, req.body)));
+  app.post('/api/import/organizer', async (req, res) => {
+    const data = await fetchDataset(req.body.group_id, organizer);
+    try {
+      const records = importRecords(store, data);
+      res.status(201).json({ group_id: data.group_id, count: records.length, records });
+    } catch (error) {
+      if (error.status === 400) throw fail('API организаторов вернул неверные диалоги', 502);
+      throw error;
     }
-    const result = store.transaction(() => records.map(c => {
-      const existing = store.list('conversation').find(x => x.group_id === group_id && x.conversation_id === c.conversation_id);
-      if (existing) return existing;
-      return store.add('conversation', { group_id, conversation_id: c.conversation_id,
-        channel: c.channel, language: c.language, audio_url: c.audio_url ?? null,
-        transcript: c.transcript.map((m, i) => ({ timestamp: m.timestamp, speaker: m.speaker, text: m.text, message_no: i + 1 })) });
-    }));
-    res.status(201).json(result);
   });
   app.get('/api/evaluations', (req, res) => res.json(store.list('evaluation').map(e => evaluationView(store, e))));
   app.post('/api/evaluations', (req, res) => {
