@@ -209,3 +209,10 @@ audio { display:block; width:100%; margin:16px 0; }
 #cqa-app .cqa-dialog-list { max-height:520px; overflow-y:auto; overscroll-behavior:contain; }
 #cqa-app .cqa-dialog-list > h2 { position:sticky; top:-24px; background:white; padding:12px 0; z-index:1; }
 #cqa-app h2 { scroll-margin-top:24px; }
+
+#cqa-app .cqa-dialog-modal { width:min(1000px, calc(100vw - 48px)); max-height:82vh; box-sizing:border-box; border:1px solid var(--cqa-border); border-radius:18px; padding:28px; background:#f4f7f6; color:var(--cqa-ink); box-shadow:0 24px 100px #102f2940; overflow-y:auto; }
+#cqa-app .cqa-dialog-modal::backdrop { background:#10262088; backdrop-filter:blur(3px); }
+#cqa-app .cqa-modal-close { float:right; position:sticky; top:0; z-index:3; background:white; color:var(--cqa-ink); border:1px solid var(--cqa-border); }
+#cqa-app .cqa-dialog-modal > h2 { margin:8px 120px 24px 0; }
+body:has(.cqa-dialog-modal[open]) { overflow:hidden; }
+@media(max-width:700px) { #cqa-app .cqa-dialog-modal { width:calc(100vw - 20px); padding:16px; max-height:90vh; } }

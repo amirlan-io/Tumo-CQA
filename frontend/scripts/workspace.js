@@ -175,7 +175,14 @@
     summary.className = "cqa-summary";
     const list = add(view, "div");
     list.className = "cqa-dialog-list";
-    const details = add(view, "div");
+    const details = add(view, "dialog");
+    details.className = 'cqa-dialog-modal';
+    details.setAttribute('aria-label', 'Диалог и оценка');
+    const closeDetails = () => { details.close(); };
+    details.addEventListener('click', event => { if (event.target === details) {
+      const bounds = details.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeDetails();
+    } });
     async function refresh(groupId) {
       const records = await api.conversations();
       list.replaceChildren();
@@ -233,12 +240,10 @@
     if (!details.isConnected || details.dataset.dialogId !== id) return;
     details.replaceChildren();
     details.tabIndex = -1;
-    const heading = add(details, 'h2', 'Карточка диалога · ' + record.conversation_id);
-    button(details, 'Вернуться к списку', () => {
-      details.replaceChildren();
-      const list = content.querySelector('.cqa-dialog-list');
-      list?.scrollIntoView?.({ block: 'start' });
-    }).className = 'cqa-secondary';
+    const close = button(details, 'Закрыть ×', () => details.close());
+    close.className = 'cqa-modal-close';
+    const heading = add(details, 'h2', 'Диалог · ' + record.conversation_id);
+
     const grid = add(details, "div");
     grid.className = "cqa-grid";
     const rows = transcript(add(grid, "section"), record);
@@ -346,8 +351,9 @@
     savedEvaluations.forEach((item, index) =>
       button(review, "Открыть оценку " + (index + 1) + " · " + total(item.final_score), () => show(item)));
     if (savedEvaluations.length) show(savedEvaluations.at(-1));
-    details.focus({ preventScroll: true });
-    heading.scrollIntoView?.({ block: 'start' });
+    if (typeof details.showModal === 'function' && !details.open) details.showModal();
+    close.focus({ preventScroll: true });
+    details.scrollTop = 0;
   }
 
   let selectedChecklistId = null;

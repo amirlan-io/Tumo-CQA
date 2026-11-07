@@ -26,6 +26,8 @@ test('frontend served by backend launches real jobs and batches through service 
     dom = await JSDOM.fromURL(url, { resources: 'usable', runScripts: 'dangerously',
       beforeParse(window) {
         window.HTMLElement.prototype.scrollIntoView = function () {};
+        window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+        window.HTMLDialogElement.prototype.close = function () { this.open = false; };
         window.fetch = (path, options) => fetch(new URL(path, url), options);
       } });
     const doc = dom.window.document;
@@ -36,6 +38,11 @@ test('frontend served by backend launches real jobs and batches through service 
     assert.equal(find('Импортировать JSON').disabled, false);
     find('Открыть UI-1 · RU').click();
     await until(() => find('Оценить через ИИ'));
+    assert.equal(doc.querySelector('.cqa-dialog-modal').open, true);
+    find('Закрыть ×').click();
+    assert.equal(doc.querySelector('.cqa-dialog-modal').open, false);
+    find('Открыть UI-1 · RU').click();
+    await until(() => doc.querySelector('.cqa-dialog-modal').open);
     find('Оценить через ИИ').click();
     await until(() => doc.body.textContent.includes('Итог · 0.00'));
     assert.equal(store.list('evaluation').length, 1);
