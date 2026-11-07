@@ -354,11 +354,22 @@
       const name = field(panel, "Название чек-листа", "input", list.latest_version.name);
       add(panel, "h2", "Редактирование версии " + list.latest_version.version);
       const readCriteria = [];
+      const meter = add(panel, 'p'); meter.className = 'cqa-weight-meter'; meter.setAttribute('role', 'status');
       const criteriaPanel = add(panel, "div");
+      function updateMeter() {
+        const sum = readCriteria.reduce((n, read) => n + (read().weight ?? 0), 0);
+        meter.textContent = 'Критериев: ' + readCriteria.length + ' · Сумма весов: ' + sum + ' / 100' + (Math.abs(sum - 100) < .000001 ? ' · Можно сохранять' : ' · Скорректируйте веса');
+        meter.dataset.valid = String(Math.abs(sum - 100) < .000001);
+      }
       function appendCriterion(criterion) {
-        const card = add(criteriaPanel, "fieldset");
+        const disclosure = add(criteriaPanel, 'details'); disclosure.className = 'cqa-criterion-disclosure';
+        disclosure.open = readCriteria.length === 0 || !criterion.text;
+        const summary = add(disclosure, 'summary');
+        const title = add(summary, 'strong', criterion.text || 'Новый критерий');
+        const meta = add(summary, 'span');
+        const card = add(disclosure, "fieldset");
         card.className = "cqa-criterion-editor";
-        add(card, "legend", criterion.criterion_id + " · " + criterion.section);
+        add(card, "legend", "Настройки критерия");
         const id = field(card, "ID критерия (измени при замене)", "input", criterion.criterion_id);
         const text = field(card, "Название и правило", "textarea", criterion.text);
         const section = field(card, "Секция", "input", criterion.section);
@@ -393,12 +404,24 @@
           }) : []
         });
         readCriteria.push(read);
+        function updateSummary() {
+          title.textContent = text.value.trim() || 'Новый критерий';
+          meta.textContent = (criterion.is_gross_error ? 'Без баллов' : 'Вес ' + (weight.value || 0)) + ' · ' + (type.value === 'scale' ? 'Шкала' : 'Да / Нет') + (na.value.trim() ? ' · N/A' : '');
+          updateMeter();
+        }
+        card.addEventListener('input', updateSummary);
+        card.addEventListener('change', updateSummary);
+        updateSummary();
         button(card, 'Удалить критерий', () => {
           readCriteria.splice(readCriteria.indexOf(read), 1);
-          card.remove();
+          disclosure.remove();
+          updateMeter();
         }).className = 'cqa-secondary';
       }
       list.latest_version.criteria.forEach(appendCriterion);
+      const shortcuts = add(panel, 'div'); shortcuts.className = 'cqa-actions';
+      button(shortcuts, 'Раскрыть все', () => criteriaPanel.querySelectorAll('details').forEach(d => { d.open = true; })).className = 'cqa-secondary';
+      button(shortcuts, 'Свернуть все', () => criteriaPanel.querySelectorAll('details').forEach(d => { d.open = false; })).className = 'cqa-secondary';
       button(panel, 'Добавить критерий', () => appendCriterion({
         criterion_id: 'new-' + Date.now(), text: '', section: 'Новая секция', weight: 0,
         answer_type: 'boolean', scale: [], na_rule: null, is_gross_error: false
@@ -406,7 +429,15 @@
       add(panel, 'p', 'Сумма весов должна быть 100. Удаление действует только в новой версии.');
       const saved = add(panel, "p");
       button(panel, "Сохранить новую версию", async () => {
-        const version = await api.saveVersion(list.id, { name: name.value, criteria: readCriteria.map(read => read()) });
+        const criteria = readCriteria.map(read => read());
+        const invalid = criteria.findIndex(c => !c.text.trim() || !c.section.trim() || !c.criterion_id || c.weight === null || c.weight < 0);
+        if (invalid >= 0) {
+          const disclosure = criteriaPanel.children[invalid]; disclosure.open = true;
+          disclosure.querySelector('input,textarea')?.focus();
+          throw new Error('Заполните название, секцию, ID и вес критерия №' + (invalid + 1));
+        }
+        if (Math.abs(criteria.reduce((sum, c) => sum + c.weight, 0) - 100) > .000001) throw new Error('Сумма весов должна быть 100');
+        const version = await api.saveVersion(list.id, { name: name.value, criteria });
         saved.textContent = "Сохранена версия " + version.version + ". Её можно выбрать в «Диалогах».";
       });
     });

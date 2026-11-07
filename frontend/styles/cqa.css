@@ -197,3 +197,11 @@ body { margin: 0; }
 @media(max-width:700px) { #cqa-app .cqa-import-controls { grid-template-columns:minmax(0,1fr); gap:20px; } }
 audio { display:block; width:100%; margin:16px 0; }
  #cqa-app input[type="checkbox"] { width:20px; min-height:20px; accent-color:var(--cqa-green); }
+
+#cqa-app .cqa-criterion-disclosure { border:1px solid var(--cqa-border); border-radius:12px; margin:12px 0; padding:0; background:#fff; }
+#cqa-app .cqa-criterion-disclosure > summary { padding:18px 20px; display:list-item; list-style-position:inside; }
+#cqa-app .cqa-criterion-disclosure summary strong { font-size:15px; color:var(--cqa-ink); font-weight:600; }
+#cqa-app .cqa-criterion-disclosure summary span { display:block; padding-left:18px; margin-top:6px; color:var(--cqa-muted); font-size:12px; font-weight:400; }
+#cqa-app .cqa-criterion-disclosure .cqa-criterion-editor { border:0; border-top:1px solid var(--cqa-border); border-radius:0; margin:0; box-shadow:none; }
+#cqa-app .cqa-weight-meter { position:sticky; top:8px; z-index:2; padding:14px 18px; border-radius:10px; background:#fff2d7; color:#664500; border:1px solid #cdb16d; }
+#cqa-app .cqa-weight-meter[data-valid="true"] { background:#e7f5eb; color:#155636; border-color:#8fbaa0; }

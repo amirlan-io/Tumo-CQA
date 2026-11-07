@@ -63,6 +63,12 @@ test('frontend served by backend launches real jobs and batches through service 
     assert.equal(dom.window.location.hash, '#appeals');
     find('Чек-листы').click();
     await until(() => find('Сохранить новую версию'));
+    assert.equal(doc.querySelectorAll('.cqa-criterion-disclosure').length, 8);
+    assert.ok(doc.querySelector('.cqa-weight-meter').textContent.includes('100 / 100'));
+    find('Свернуть все').click();
+    assert.ok([...doc.querySelectorAll('.cqa-criterion-disclosure')].every(d => !d.open));
+    find('Раскрыть все').click();
+    assert.ok([...doc.querySelectorAll('.cqa-criterion-disclosure')].every(d => d.open));
     find('Добавить критерий').click();
     assert.equal(doc.querySelectorAll('.cqa-criterion-editor').length, 9);
     [...doc.querySelectorAll('.cqa-criterion-editor')].at(-1).querySelector('button').click();
