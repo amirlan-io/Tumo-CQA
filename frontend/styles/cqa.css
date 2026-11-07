@@ -216,3 +216,10 @@ audio { display:block; width:100%; margin:16px 0; }
 #cqa-app .cqa-dialog-modal > h2 { margin:8px 120px 24px 0; }
 body:has(.cqa-dialog-modal[open]) { overflow:hidden; }
 @media(max-width:700px) { #cqa-app .cqa-dialog-modal { width:calc(100vw - 20px); padding:16px; max-height:90vh; } }
+
+#cqa-app .cqa-help { padding:16px 20px; background:#eaf4ee; border-radius:10px; color:#24513b; }
+#cqa-app .cqa-scale-row { display:grid;grid-template-columns:90px minmax(0,1fr) auto;gap:12px;align-items:end; }
+#cqa-app .cqa-scale-row button { margin-bottom:16px; }
+#cqa-app .cqa-scale-panel { border:1px solid var(--cqa-border);padding:16px;border-radius:10px; }
+#cqa-app .cqa-criterion-editor > [hidden] { display:none; }
+@media(max-width:600px) { #cqa-app .cqa-scale-row { grid-template-columns:80px minmax(0,1fr); } #cqa-app .cqa-scale-row button { grid-column:1/-1; } }

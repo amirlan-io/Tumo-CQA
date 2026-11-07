@@ -78,7 +78,7 @@ test('frontend served by backend launches real jobs and batches through service 
     assert.ok([...doc.querySelectorAll('.cqa-criterion-disclosure')].every(d => d.open));
     find('Добавить критерий').click();
     assert.equal(doc.querySelectorAll('.cqa-criterion-editor').length, 9);
-    [...doc.querySelectorAll('.cqa-criterion-editor')].at(-1).querySelector('button').click();
+    [...doc.querySelectorAll('.cqa-criterion-editor')].at(-1).querySelectorAll('button').forEach(b => { if (b.textContent === 'Удалить критерий') b.click(); });
     assert.equal(doc.querySelectorAll('.cqa-criterion-editor').length, 8);
     const inputs = [...doc.querySelectorAll('textarea')];
     inputs[0].value = 'Заменённый через интерфейс критерий';

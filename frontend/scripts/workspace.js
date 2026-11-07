@@ -364,8 +364,11 @@
     chooser.value = lists.some(list => list.id === selectedChecklistId) ? selectedChecklistId : lists[0]?.id || '';
     selectedChecklistId = chooser.value;
     const editor = add(view, 'div');
-    const createPanel = add(view, 'section');
-    add(createPanel, 'h2', 'Новый чек-лист');
+    const intro = add(view, 'p', 'Готовые правила уже заполнены. Меняйте их только при необходимости. Для оценки разговора перейдите в «Диалоги».');
+    intro.className = 'cqa-help';
+    view.insertBefore(intro, chooser.parentElement);
+    const createPanel = add(view, 'details');
+    add(createPanel, 'summary', 'Создать отдельный чек-лист');
     const newName = field(createPanel, 'Название нового чек-листа');
     button(createPanel, 'Создать на основе текущего', async () => {
       if (!lists.length) throw new Error('Нет начального чек-листа');
@@ -391,50 +394,56 @@
       }
       function appendCriterion(criterion) {
         const disclosure = add(criteriaPanel, 'details'); disclosure.className = 'cqa-criterion-disclosure';
-        disclosure.open = readCriteria.length === 0 || !criterion.text;
+        disclosure.open = !criterion.text;
         const summary = add(disclosure, 'summary');
-        const title = add(summary, 'strong', criterion.text || 'Новый критерий');
+        const title = add(summary, 'strong', criterion.text.split(':')[0].split('.')[0] || 'Новый критерий');
         const meta = add(summary, 'span');
         const card = add(disclosure, "fieldset");
         card.className = "cqa-criterion-editor";
         add(card, "legend", "Настройки критерия");
         const criterionId = criterion.criterion_id;
-        const text = field(card, "Название и правило", "textarea", criterion.text);
-        const section = field(card, "Секция", "input", criterion.section);
-        const weight = field(card, "Вес", "input", criterion.weight);
+        const text = field(card, "Что должен сделать оператор?", "textarea", criterion.text);
+        const section = field(card, "Раздел проверки", "input", criterion.section);
+        const weight = field(card, "Максимум баллов", "input", criterion.weight);
         weight.type = "number";
         weight.min = 0;
-        const type = field(card, "Тип ответа", "select");
+        const type = field(card, "Как оценивать?", "select");
         option(type, "boolean", "Да / Нет");
         option(type, "scale", "Шкала");
         type.value = criterion.answer_type;
-        const scale = field(card, "Ступени: одна строка на ступень, число | описание", "textarea",
-          criterion.scale.map(step => step.value + " | " + step.description).join("\n"));
-        const na = field(card, "Условие N/A (пусто, если запрещено)", "textarea", criterion.na_rule || "");
-        text.parentElement.className = 'cqa-wide';
-        scale.parentElement.className = 'cqa-wide';
-        na.parentElement.className = 'cqa-wide';
-        const updateScale = () => { scale.parentElement.hidden = type.value !== 'scale'; };
-        type.addEventListener('change', updateScale);
-        updateScale();
+        const scalePanel = add(card, 'div'); scalePanel.className = 'cqa-wide cqa-scale-panel';
+        add(scalePanel, 'p', 'Баллы и условия их получения');
+        const scaleRows = [];
+        function addStep(step = {value:0,description:''}) {
+          const row = add(scalePanel, 'div'); row.className = 'cqa-scale-row';
+          const value = field(row, 'Баллы', 'input', step.value); value.type = 'number'; value.min = 0;
+          const description = field(row, 'За что поставить', 'input', step.description);
+          const read = () => ({value:value.value.trim() === '' ? null : Number(value.value),description:description.value.trim()});
+          scaleRows.push(read);
+          button(row, 'Убрать ступень', () => { scaleRows.splice(scaleRows.indexOf(read),1);row.remove(); }).className = 'cqa-secondary';
+        }
+        criterion.scale.forEach(addStep);
+        button(scalePanel, 'Добавить ступень', () => addStep()).className = 'cqa-secondary';
+        const naAllowed = field(card, 'Можно не оценивать, если правило неприменимо?', 'input'); naAllowed.type='checkbox';naAllowed.checked=criterion.allow_na;
+        const na = field(card, 'Когда это правило не применяется?', 'textarea', criterion.na_rule || '');
+        text.parentElement.className = 'cqa-wide'; na.parentElement.className = 'cqa-wide';
+        const updateOptions = () => { scalePanel.hidden = type.value !== 'scale';na.parentElement.hidden=!naAllowed.checked; };
+        type.addEventListener('change',updateOptions);naAllowed.addEventListener('change',updateOptions);updateOptions();
         const read = () => ({
           criterion_id: criterionId,
           text: text.value,
           section: section.value,
           weight: weight.value.trim() === "" ? null : Number(weight.value),
           answer_type: type.value,
-          allow_na: Boolean(na.value.trim()),
-          na_rule: na.value,
+          allow_na: naAllowed.checked,
+          na_rule: naAllowed.checked ? na.value : null,
           is_gross_error: criterion.is_gross_error,
-          scale: type.value === "scale" ? scale.value.trim().split("\n").map(line => {
-            const [value, ...description] = line.split("|");
-            return { value: value.trim() === "" ? null : Number(value.trim()), description: description.join("|").trim() };
-          }) : []
+          scale: type.value === "scale" ? scaleRows.map(read => read()) : []
         });
         readCriteria.push(read);
         function updateSummary() {
-          title.textContent = text.value.trim() || 'Новый критерий';
-          meta.textContent = (criterion.is_gross_error ? 'Без баллов' : 'Вес ' + (weight.value || 0)) + ' · ' + (type.value === 'scale' ? 'Шкала' : 'Да / Нет') + (na.value.trim() ? ' · N/A' : '');
+          title.textContent = text.value.trim().split(':')[0].split('.')[0] || 'Новый критерий';
+          meta.textContent = (criterion.is_gross_error ? 'Без баллов' : 'Вес ' + (weight.value || 0)) + ' · ' + (type.value === 'scale' ? 'Шкала' : 'Да / Нет') + (naAllowed.checked ? ' · Можно пропустить' : '');
           updateMeter();
         }
         card.addEventListener('input', updateSummary);
