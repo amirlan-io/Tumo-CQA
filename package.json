@@ -1,1 +1,1 @@
-{"name":"tumo-cqa","version":"0.1.0","private":true,"type":"module","scripts":{"start":"node --env-file-if-exists=.env server/index.js","test":"node --test"},"engines":{"node":">=24"},"dependencies":{"express":"^5.1.0"}}
+{"name":"tumo-cqa","version":"0.1.0","private":true,"type":"module","scripts":{"start":"node --env-file-if-exists=.env server/index.js","test":"node --test"},"engines":{"node":">=24"},"dependencies":{"express":"^5.1.0"},"devDependencies":{"jsdom":"^29.1.1"}}
