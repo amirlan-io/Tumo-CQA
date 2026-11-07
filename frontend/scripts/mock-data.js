@@ -16,11 +16,11 @@ window.CqaMock = {
   assessment: {
     conversation_id: "DEMO-001",
     checklist_version: "demo-v1",
-    criterion: "Контакт",
+    criterion: "Установление контакта",
     answer: "Да",
     weight: 10,
     points: 10,
-    explanation: "Оператор поздоровалась и представилась.",
+    explanation: "В первом ответе оператор поздоровалась на русском языке и представилась.",
     evidence: { turn_index: 3 }
   }
 };
