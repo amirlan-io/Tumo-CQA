@@ -417,7 +417,7 @@
         function addStep(step = {value:0,description:''}) {
           const row = add(scalePanel, 'div'); row.className = 'cqa-scale-row';
           const value = field(row, 'Баллы', 'input', step.value); value.type = 'number'; value.min = 0;
-          const description = field(row, 'За что поставить', 'input', step.description);
+          const description = field(row, 'За что поставить', 'textarea', step.description);
           const read = () => ({value:value.value.trim() === '' ? null : Number(value.value),description:description.value.trim()});
           scaleRows.push(read);
           button(row, 'Убрать ступень', () => { scaleRows.splice(scaleRows.indexOf(read),1);row.remove(); }).className = 'cqa-secondary';

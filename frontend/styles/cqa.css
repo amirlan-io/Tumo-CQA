@@ -223,3 +223,9 @@ body:has(.cqa-dialog-modal[open]) { overflow:hidden; }
 #cqa-app .cqa-scale-panel { border:1px solid var(--cqa-border);padding:16px;border-radius:10px; }
 #cqa-app .cqa-criterion-editor > [hidden] { display:none; }
 @media(max-width:600px) { #cqa-app .cqa-scale-row { grid-template-columns:80px minmax(0,1fr); } #cqa-app .cqa-scale-row button { grid-column:1/-1; } }
+
+#cqa-app .cqa-weight-meter { position:static; }
+#cqa-app .cqa-scale-row { align-items:center; grid-template-columns:80px minmax(0,1fr); padding:12px 0; border-top:1px solid var(--cqa-border); }
+#cqa-app .cqa-scale-row label { margin:4px 0; }
+#cqa-app .cqa-scale-row textarea { min-height:90px; }
+#cqa-app .cqa-scale-row button { grid-column:2; justify-self:start; margin:0 0 8px; }
