@@ -1,6 +1,5 @@
 import express from 'express';
 import { fileURLToPath } from 'node:url';
-
 import { validateResults } from './validate-results.js';
 import { installJobs } from './jobs.js';
 import { importRecords } from './import.js';
@@ -15,7 +14,7 @@ export function createApp(store, organizer = {}, ai = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use('/frontend', express.static(fileURLToPath(new URL('../frontend', import.meta.url))));
-
+  app.get('/', (req, res) => res.redirect('/frontend/'));
   app.use(express.json({ limit: '5mb' }));
   const get = (kind, id) => {
     const row = store.get(kind, id);
