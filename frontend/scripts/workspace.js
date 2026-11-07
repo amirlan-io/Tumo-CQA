@@ -211,6 +211,8 @@
     const versionSelect = field(review, "Версия чек-листа", "select");
     versions.forEach(version => option(versionSelect, version.id, version.name + " · v" + version.version));
     versionSelect.value = versions.at(-1)?.id || "";
+    const actions = add(review, "div");
+    actions.className = "cqa-actions";
     const form = add(review, "div");
     const output = add(review, "div");
 
@@ -233,9 +235,11 @@
         add(card, "p", original.explanation);
         if (result.na_reason) add(card, "p", "Причина N/A · " + result.na_reason);
         evidence(card, original.evidence_message_nos, rows);
-        const comment = field(card, "Комментарий к апелляции", "textarea");
+        const appealForm = add(card, "details");
+        add(appealForm, "summary", "Оспорить оценку");
+        const comment = field(appealForm, "Комментарий к апелляции", "textarea");
         const message = add(card, "p");
-        button(card, "Подать апелляцию", async () => {
+        button(appealForm, "Подать апелляцию", async () => {
           await api.appeal({ evaluation_id: evaluation.id, criterion_id: criterion.criterion_id, comment: comment.value });
           comment.value = "";
           message.textContent = "Апелляция сохранена.";
@@ -266,17 +270,17 @@
       });
     }
 
-    const jobStatus = add(review, 'p');
-    button(review, 'Оценить через ИИ', async () => {
+    const jobStatus = add(actions, 'p');
+    button(actions, 'Оценить через ИИ', async () => {
       const job = await api.startJob({ conversation_id: record.id, checklist_version: versionSelect.value });
       const done = await watch(() => api.job(job.id), item => {
         jobStatus.textContent = jobLabels[item.status] + (item.cache_hit ? ' · из кэша' : '') + (item.error ? ' · ' + item.error : '');
       }, () => review.isConnected);
       if (done?.status === 'completed') show(await api.evaluation(done.evaluation_id));
     });
-    button(review, "Заполнить оценку вручную", editAnswers);
+    button(actions, "Заполнить оценку вручную", editAnswers);
     if (record.group_id === "DEMO" && record.conversation_id === "DEMO-001") {
-      button(review, "Запустить оценку на вымышленных ответах", async () => {
+      button(actions, "Запустить оценку на вымышленных ответах", async () => {
         const version = versions.find(item => item.id === versionSelect.value);
         if (version?.version !== 1 || version.name !== "Freedom Broker — качество диалогов") {
           throw new Error("Готовые ответы подготовлены для v1. Для новой версии заполни ответы вручную.");
@@ -301,6 +305,7 @@
       add(panel, "h2", "Редактирование версии " + list.latest_version.version);
       const readCriteria = list.latest_version.criteria.map(criterion => {
         const card = add(panel, "fieldset");
+        card.className = "cqa-criterion-editor";
         add(card, "legend", criterion.criterion_id + " · " + criterion.section);
         const id = field(card, "ID критерия (измени при замене)", "input", criterion.criterion_id);
         const text = field(card, "Название и правило", "textarea", criterion.text);
@@ -315,6 +320,12 @@
         const scale = field(card, "Ступени: одна строка на ступень, число | описание", "textarea",
           criterion.scale.map(step => step.value + " | " + step.description).join("\n"));
         const na = field(card, "Условие N/A (пусто, если запрещено)", "textarea", criterion.na_rule || "");
+        text.parentElement.className = 'cqa-wide';
+        scale.parentElement.className = 'cqa-wide';
+        na.parentElement.className = 'cqa-wide';
+        const updateScale = () => { scale.parentElement.hidden = type.value !== 'scale'; };
+        type.addEventListener('change', updateScale);
+        updateScale();
         return () => ({
           criterion_id: id.value.trim(),
           text: text.value,
