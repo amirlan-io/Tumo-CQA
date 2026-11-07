@@ -142,5 +142,5 @@ test('private output cannot overwrite inputs or include an API key', async t => 
   await assert.rejects(writePrivateJson(output, { explanation: 'synthetic credential' }, 'synthetic credential'));
   await writePrivateJson(output, { status: 'synthetic' }, 'synthetic credential');
   assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { status: 'synthetic' });
-  assert.equal((await stat(output)).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal((await stat(output)).mode & 0o777, 0o600);
 });

@@ -118,7 +118,7 @@ async function diagnostics(ctx) {
   // Only transient filesystem/partial-JSON failures above are retried, never assertions.
   for (const { name, path, raw, record } of entries) {
     assert.ok(name.endsWith('.json'), `Unexpected diagnostic file ${name}`);
-    assert.equal((await stat(path)).mode & 0o777, 0o600, 'Diagnostics must be private files');
+    if (process.platform !== 'win32') assert.equal((await stat(path)).mode & 0o777, 0o600, 'Diagnostics must be private files');
     assert.ok(!raw.includes(API_KEY), 'Diagnostic file must redact the API key');
     assert.equal(name, `${record.diagnostic_id}.json`);
   }
@@ -838,7 +838,7 @@ test('invalid input fails without fetch or diagnostic output', async t => {
     ['unknown speaker', ({ conversation }) => { conversation.transcript[0].speaker = 'assistant'; }],
     ['missing timestamp', ({ conversation }) => { delete conversation.transcript[0].timestamp; }],
     ['non-text transcript', ({ conversation }) => { conversation.transcript[0].text = null; }],
-    ['missing criterion', ({ version }) => { version.criteria.pop(); }]
+    ['empty checklist', ({ version }) => { version.criteria = []; }]
   ];
   for (const [name, mutate] of cases) await t.test(name, async t => {
     const input = fixture();

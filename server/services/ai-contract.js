@@ -34,7 +34,7 @@ export function createOutputContract(input) {
     type: 'object', additionalProperties: false, required: ['results'],
     properties: {
       results: {
-        type: 'array', minItems: 8, maxItems: 8,
+        type: 'array', minItems: criteria.length, maxItems: criteria.length,
         items: {
           type: 'object', additionalProperties: false,
           required: ['criterion_id', 'answer', 'raw_score', 'explanation', 'evidence_message_nos', 'checked_range', 'na_reason'],
@@ -88,7 +88,7 @@ export function createOutputContract(input) {
         errors.push(`${prefix}: для отсутствия действия, частичной шкалы или пустых доказательств нужен checked_range.`);
       }
     }
-    if (ids.size !== criteria.length) errors.push('Нужны все восемь уникальных criterion_id выбранной версии.');
+    if (ids.size !== criteria.length) errors.push('Нужны все уникальные criterion_id выбранной версии.');
     return errors.length ? { errors } : { results: criteria.map(c => output.results.find(r => r.criterion_id === c.criterion_id)), errors: [] };
   }
   return { schema, parse };
