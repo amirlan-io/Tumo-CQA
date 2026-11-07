@@ -23,14 +23,16 @@
     return control;
   }
 
+  let actionSequence = 0;
   async function run(action, control) {
+    const sequence = ++actionSequence;
     status.textContent = "Загрузка…";
     if (control) control.disabled = true;
     try {
       await action();
-      status.textContent = "";
+      if (sequence === actionSequence) status.textContent = "";
     } catch (error) {
-      status.textContent = error.message;
+      if (sequence === actionSequence) { status.textContent = error.message; status.scrollIntoView?.({ block: "nearest" }); }
     } finally {
       if (control) control.disabled = false;
     }
@@ -48,6 +50,8 @@
   }
 
   function navigate(page) {
+    if (!pages[page]) page = "dialogs";
+    if (location.hash !== "#" + page) history.pushState(null, "", "#" + page);
     const view = document.createElement("div");
     content.replaceChildren(view);
     const [title, description, render] = pages[page];
@@ -223,8 +227,10 @@
   }
 
   async function openDialog(details, id) {
+    details.dataset.dialogId = id;
     const [record, lists, evaluations] = await Promise.all([api.conversation(id), api.checklists(), api.evaluations()]);
     const versions = (await Promise.all(lists.map(list => api.versions(list.id)))).flat();
+    if (!details.isConnected || details.dataset.dialogId !== id) return;
     details.replaceChildren();
     const grid = add(details, "div");
     grid.className = "cqa-grid";
@@ -309,7 +315,10 @@
       const done = await watch(() => api.job(job.id), item => {
         jobStatus.textContent = jobLabels[item.status] + (item.cache_hit ? ' · из кэша' : '') + (item.error ? ' · ' + item.error : '');
       }, () => review.isConnected);
-      if (done?.status === 'completed') show(await api.evaluation(done.evaluation_id));
+      if (done?.status === 'completed' && review.isConnected) {
+        const evaluation = await api.evaluation(done.evaluation_id);
+        if (evaluation.checklist_version === versionSelect.value) show(evaluation);
+      }
     });
     button(actions, "Заполнить оценку вручную", editAnswers);
     if (record.group_id === "DEMO" && record.conversation_id === "DEMO-001") {
@@ -325,7 +334,7 @@
         }));
       });
     }
-    versionSelect.addEventListener("change", () => form.replaceChildren());
+    versionSelect.addEventListener("change", () => { form.replaceChildren(); output.replaceChildren(); jobStatus.textContent = ""; });
     evaluations.filter(item => item.conversation_id === record.id).forEach((item, index) =>
       button(review, "Открыть оценку " + (index + 1) + " · " + total(item.final_score), () => show(item)));
   }
@@ -433,5 +442,6 @@
     button(panel, "Изменить ответ", () => decide("change", read()));
   }
 
-  run(() => navigate("dialogs"));
+  window.addEventListener("popstate", () => run(() => navigate(location.hash.slice(1))));
+  run(() => navigate(location.hash.slice(1) || "dialogs"));
 })();

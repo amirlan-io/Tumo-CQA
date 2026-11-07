@@ -5,7 +5,8 @@ window.CqaService = (() => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    const data = await response.json();
+    let data;
+    try { data = await response.json(); } catch { throw new Error("Сервер вернул неожиданный ответ. Проверьте, что сервер запущен и обновлён."); }
     if (!response.ok) throw new Error(data.error || "Ошибка API");
     return data;
   }
