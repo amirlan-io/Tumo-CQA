@@ -25,7 +25,7 @@ npm start
 
 ## Что подключаем следующим этапом
 
-API запуска готов: POST /api/evaluation-jobs, статусы через GET /api/evaluation-jobs/:id. Подключение настоящего ИИ описано в docs/api.md; по умолчанию AI_ENABLED=false и сервер явно возвращает 503. Статусы и результаты хранятся в SQLite. Пакетный запуск и кэш ещё не реализованы.
+API запуска готов: POST /api/evaluation-jobs, статусы через GET /api/evaluation-jobs/:id. Подключение настоящего ИИ описано в docs/api.md; по умолчанию AI_ENABLED=false и сервер явно возвращает 503. Статусы и результаты хранятся в SQLite. Пакетный запуск: POST /api/evaluation-batches с group_id и checklist_version. Кэш работает при экспортах model и prompt_version из модуля ИИ; ошибки не кэшируются.
 
 Модуль ИИ и интерфейс. Текущий POST /evaluations сохраняет готовые результаты и не запускает ИИ.
 

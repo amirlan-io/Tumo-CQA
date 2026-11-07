@@ -77,3 +77,37 @@ test('restart marks interrupted jobs failed', () => {
   assert.equal(store.get('job', j.id).status, 'failed');
   store.db.close();
 });
+
+test('batch continues after failure; cache reuses answers and invalidates changed criteria', async () => {
+  let calls = 0;
+  const ctx = await setup({ model: 'test-only', prompt_version: 'v1', evaluateDialogue: async c => {
+    calls++;
+    if (c.bad) throw new Error('Provider failure');
+    return ctx.output;
+  } });
+  try {
+    ctx.store.update('conversation', ctx.body.conversation_id, { group_id: 'DEV' });
+    ctx.store.add('conversation', { group_id: 'DEV', bad: true, transcript: [{ message_no: 1, text: 'Bad' }] });
+    assert.equal((await ctx.request('/evaluation-batches', { group_id: 'MISSING', checklist_version: ctx.body.checklist_version })).status, 404);
+    const response = await ctx.request('/evaluation-batches', { group_id: 'DEV', checklist_version: ctx.body.checklist_version });
+    assert.equal(response.status, 202);
+    for (const id of response.data.job_ids) await terminal(ctx, id);
+    const batch = (await ctx.request(`/evaluation-batches/${response.data.id}`)).data;
+    assert.equal(batch.status, 'completed_with_errors');
+    assert.equal(batch.progress, 100); assert.equal(batch.completed, 1); assert.equal(batch.failed, 1);
+    const repeat = await ctx.request('/evaluation-jobs', ctx.body);
+    const hit = await terminal(ctx, repeat.data.id);
+    assert.equal(hit.cache_hit, true); assert.equal(calls, 2);
+    const version = structuredClone(ctx.store.get('checklist_version', ctx.body.checklist_version));
+    version.criteria[0].text = 'Changed criterion';
+    const next = ctx.store.add('checklist_version', version);
+    const changed = await ctx.request('/evaluation-jobs', { ...ctx.body, checklist_version: next.id });
+    assert.equal((await terminal(ctx, changed.data.id)).cache_hit, false);
+    assert.equal(calls, 3);
+    assert.equal(ctx.store.list('ai_cache').length, 2);
+    ctx.store.update('conversation', ctx.body.conversation_id, { transcript: [{ message_no: 1, text: 'Updated transcript' }] });
+    const revised = await ctx.request('/evaluation-jobs', ctx.body);
+    assert.equal((await terminal(ctx, revised.data.id)).cache_hit, false);
+    assert.equal(calls, 4);
+  } finally { await ctx.close(); }
+});
