@@ -21,10 +21,29 @@ test('import, evaluation, appeal and immutable review history', async () => {
     assert.equal(imported.status, 201);
     const duplicate = await request('/import', input);
     assert.equal(duplicate.data[0].id, imported.data[0].id);
+    const version = (await request('/checklists')).data[0].latest_version;
+    const answers = version.criteria.map(c => ({ criterion_id: c.criterion_id, answer: c.answer_type === 'scale' ? 'scale' : 'no', raw_score: c.is_gross_error ? null : 0, explanation: 'Проверено', evidence_message_nos: [1] }));
     const evaluation = await request('/evaluations', { conversation_id: imported.data[0].id,
-      checklist_version: 'v1', results: [{ criterion_id: 'c1', answer: 'no', raw_score: 0,
-        explanation: 'Не представился', evidence_message_nos: [1] }] });
+      checklist_version: version.id, results: answers });
     assert.equal(evaluation.status, 201);
+    const edited = structuredClone(version);
+    edited.criteria[0].text = 'Новый критерий';
+    edited.criteria[0].allow_na = true;
+    edited.criteria[0].na_rule = 'Новое условие';
+    const nextVersion = await request(`/checklists/${version.checklist_id}/versions`, edited);
+    assert.equal(nextVersion.status, 201);
+    assert.equal(nextVersion.data.version, 2);
+    assert.notEqual(nextVersion.data.id, version.id);
+    assert.equal((await request(`/checklist-versions/${version.id}`)).data.criteria[0].text, version.criteria[0].text);
+    const bad = structuredClone(edited);
+    bad.criteria[0].weight = -1;
+    assert.equal((await request(`/checklists/${version.checklist_id}/versions`, bad)).status, 400);
+    const invalidAnswers = structuredClone(answers);
+    invalidAnswers[0] = { ...invalidAnswers[0], answer: 'na', raw_score: null, na_reason: 'Причина' };
+    assert.equal((await request('/evaluations', { conversation_id: imported.data[0].id,
+      checklist_version: version.id, results: invalidAnswers })).status, 400);
+    assert.equal((await request('/evaluations', { conversation_id: imported.data[0].id,
+      checklist_version: nextVersion.data.id, results: invalidAnswers })).status, 201);
     const appealBody = { evaluation_id: evaluation.data.id, criterion_id: 'c1', comment: 'Прошу проверить' };
     const appeal = await request('/appeals', appealBody);
     assert.equal(appeal.status, 201);
@@ -43,3 +62,4 @@ test('import, evaluation, appeal and immutable review history', async () => {
     store.db.close();
   }
 });
+

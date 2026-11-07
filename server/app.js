@@ -1,4 +1,5 @@
 import express from 'express';
+import { installChecklists, validateAnswers } from './checklists.js';
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const text = value => typeof value === 'string' && value.trim().length > 0;
@@ -13,6 +14,7 @@ export function createApp(store) {
     return row;
   };
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+  installChecklists(app, store, get);
   app.get('/api/conversations', (req, res) => res.json(store.list('conversation')));
   app.get('/api/conversations/:id', (req, res) => res.json(get('conversation', req.params.id)));
   app.post('/api/import', (req, res) => {
@@ -42,6 +44,7 @@ export function createApp(store) {
     if (!text(checklist_version) || !Array.isArray(results) || !results.length)
       throw fail('Нужны checklist_version и results');
     const ids = new Set();
+    const version = get('checklist_version', checklist_version);
     for (const r of results) {
       if (!r || !text(r.criterion_id) || ids.has(r.criterion_id) || !text(r.explanation)
         || !['yes', 'no', 'scale', 'na'].includes(r.answer)
@@ -52,6 +55,7 @@ export function createApp(store) {
         throw fail('Неверный результат критерия');
       ids.add(r.criterion_id);
     }
+    validateAnswers(version, results);
     res.status(201).json(store.add('evaluation', { conversation_id, checklist_version, results }, conversation_id));
   });
   app.get('/api/evaluations/:id', (req, res) => {
@@ -85,6 +89,11 @@ export function createApp(store) {
       || (replacement.answer === 'na' && (!text(replacement.na_reason) || replacement.raw_score !== null))))
       throw fail('Нужна корректная новая оценка');
     const result = store.transaction(() => {
+      if (action === 'change') {
+        const evaluation = get('evaluation', appeal.evaluation_id);
+        const version = get('checklist_version', evaluation.checklist_version);
+        validateAnswers(version, evaluation.results.map(r => r.criterion_id === appeal.criterion_id ? { ...r, ...replacement } : r));
+      }
       if (store.list('decision').some(d => d.appeal_id === appeal.id)) throw fail('Решение уже сохранено', 409);
       return store.add('decision', { appeal_id: appeal.id, evaluation_id: appeal.evaluation_id,
         criterion_id: appeal.criterion_id, action, reason: reason.trim(),
