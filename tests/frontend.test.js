@@ -63,6 +63,10 @@ test('frontend served by backend launches real jobs and batches through service 
     assert.equal(dom.window.location.hash, '#appeals');
     find('Чек-листы').click();
     await until(() => find('Сохранить новую версию'));
+    find('Добавить критерий').click();
+    assert.equal(doc.querySelectorAll('.cqa-criterion-editor').length, 9);
+    [...doc.querySelectorAll('.cqa-criterion-editor')].at(-1).querySelector('button').click();
+    assert.equal(doc.querySelectorAll('.cqa-criterion-editor').length, 8);
     const inputs = [...doc.querySelectorAll('textarea')];
     inputs[0].value = 'Заменённый через интерфейс критерий';
     find('Сохранить новую версию').click();

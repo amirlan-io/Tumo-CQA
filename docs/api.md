@@ -57,7 +57,7 @@ POST /api/evaluations, GET /api/evaluations и GET /api/evaluations/:id возв
 - POST /api/checklists — создать чек-лист и первую версию.
 - POST /api/checklists/:id/versions — сохранить новую версию.
 
-Для создания отправьте name и criteria. Проще получить latest_version, изменить нужные поля и отправить её целиком. Поля id, version, created_at сервер назначает сам. Критериев ровно восемь, criterion_id уникальны, сумма весов 100. Поля критерия: criterion_id, text, section, weight, answer_type (boolean/scale), allow_na, na_rule, is_gross_error, scale (массив {value, description}). Для грубой ошибки вес 0 и N/A запрещён. Округление — два знака.
+Для создания отправьте name и criteria. Проще получить latest_version, изменить нужные поля и отправить её целиком. Поля id, version, created_at сервер назначает сам. Начально восемь критериев; допускается от 1 до 50, criterion_id уникальны, сумма весов 100. Поля критерия: criterion_id, text, section, weight, answer_type (boolean/scale), allow_na, na_rule, is_gross_error, scale (массив {value, description}). Для грубой ошибки вес 0 и N/A запрещён. Округление — два знака.
 
 Версии неизменяемы. В POST /api/evaluations поле checklist_version теперь обязательно содержит UUID существующей версии, полученный из API, а не строку v1. Передавайте все восемь ответов. Сервер проверяет тип ответа, ступень шкалы и разрешение N/A. Эти же проверки действуют при решении по апелляции.
 400 — неверные данные, 404 — запись не найдена, 409 — повторная апелляция или решение.

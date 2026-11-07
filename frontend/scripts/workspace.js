@@ -353,8 +353,10 @@
       const panel = add(view, "section");
       const name = field(panel, "Название чек-листа", "input", list.latest_version.name);
       add(panel, "h2", "Редактирование версии " + list.latest_version.version);
-      const readCriteria = list.latest_version.criteria.map(criterion => {
-        const card = add(panel, "fieldset");
+      const readCriteria = [];
+      const criteriaPanel = add(panel, "div");
+      function appendCriterion(criterion) {
+        const card = add(criteriaPanel, "fieldset");
         card.className = "cqa-criterion-editor";
         add(card, "legend", criterion.criterion_id + " · " + criterion.section);
         const id = field(card, "ID критерия (измени при замене)", "input", criterion.criterion_id);
@@ -376,7 +378,7 @@
         const updateScale = () => { scale.parentElement.hidden = type.value !== 'scale'; };
         type.addEventListener('change', updateScale);
         updateScale();
-        return () => ({
+        const read = () => ({
           criterion_id: id.value.trim(),
           text: text.value,
           section: section.value,
@@ -390,7 +392,18 @@
             return { value: value.trim() === "" ? null : Number(value.trim()), description: description.join("|").trim() };
           }) : []
         });
-      });
+        readCriteria.push(read);
+        button(card, 'Удалить критерий', () => {
+          readCriteria.splice(readCriteria.indexOf(read), 1);
+          card.remove();
+        }).className = 'cqa-secondary';
+      }
+      list.latest_version.criteria.forEach(appendCriterion);
+      button(panel, 'Добавить критерий', () => appendCriterion({
+        criterion_id: 'new-' + Date.now(), text: '', section: 'Новая секция', weight: 0,
+        answer_type: 'boolean', scale: [], na_rule: null, is_gross_error: false
+      }));
+      add(panel, 'p', 'Сумма весов должна быть 100. Удаление действует только в новой версии.');
       const saved = add(panel, "p");
       button(panel, "Сохранить новую версию", async () => {
         const version = await api.saveVersion(list.id, { name: name.value, criteria: readCriteria.map(read => read()) });
