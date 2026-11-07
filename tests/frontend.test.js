@@ -84,6 +84,18 @@ test('frontend served by backend launches real jobs and batches through service 
     newName.value = 'Чек-лист команды';
     find('Создать на основе текущего').click();
     await until(() => store.list('checklist').length === 2);
+    await until(() => [...doc.querySelectorAll('label')].find(l => l.firstChild.textContent === 'Выберите чек-лист')?.querySelector('select').options.length === 2);
+    const chooser = [...doc.querySelectorAll('label')].find(l => l.firstChild.textContent === 'Выберите чек-лист').querySelector('select');
+    assert.equal(doc.querySelectorAll('.cqa-criterion-editor').length, 8);
+    assert.ok(!doc.body.textContent.includes('ID критерия'));
+    chooser.value = store.list('checklist')[0].id;
+    chooser.dispatchEvent(new dom.window.Event('change'));
+    assert.equal(doc.querySelectorAll('.cqa-criterion-editor').length, 8);
+    assert.ok(doc.body.textContent.includes('Редактирование версии 2'));
+    chooser.value = store.list('checklist')[1].id;
+    chooser.dispatchEvent(new dom.window.Event('change'));
+    assert.ok(doc.body.textContent.includes('Редактирование версии 1'));
+
     assert.equal(dom.window.location.hash, '#checklists');
   } finally {
     dom?.window.close();

@@ -339,18 +339,29 @@
       button(review, "Открыть оценку " + (index + 1) + " · " + total(item.final_score), () => show(item)));
   }
 
+  let selectedChecklistId = null;
   async function checklists(view) {
     const lists = await api.checklists();
+    const chooser = field(view, 'Выберите чек-лист', 'select');
+    lists.forEach(list => option(chooser, list.id, list.latest_version.name));
+    chooser.value = lists.some(list => list.id === selectedChecklistId) ? selectedChecklistId : lists[0]?.id || '';
+    selectedChecklistId = chooser.value;
+    const editor = add(view, 'div');
     const createPanel = add(view, 'section');
     add(createPanel, 'h2', 'Новый чек-лист');
     const newName = field(createPanel, 'Название нового чек-листа');
     button(createPanel, 'Создать на основе текущего', async () => {
       if (!lists.length) throw new Error('Нет начального чек-листа');
-      await api.createChecklist({ ...lists[0].latest_version, name: newName.value });
+      const source = lists.find(list => list.id === chooser.value);
+      const created = await api.createChecklist({ ...source.latest_version, name: newName.value });
+      selectedChecklistId = created.checklist_id;
       await navigate('checklists');
     });
-    lists.forEach(list => {
-      const panel = add(view, "section");
+    function renderSelected() {
+      editor.replaceChildren();
+      const list = lists.find(list => list.id === chooser.value);
+      if (!list) return;
+      const panel = add(editor, "section");
       const name = field(panel, "Название чек-листа", "input", list.latest_version.name);
       add(panel, "h2", "Редактирование версии " + list.latest_version.version);
       const readCriteria = [];
@@ -370,7 +381,7 @@
         const card = add(disclosure, "fieldset");
         card.className = "cqa-criterion-editor";
         add(card, "legend", "Настройки критерия");
-        const id = field(card, "ID критерия (измени при замене)", "input", criterion.criterion_id);
+        const criterionId = criterion.criterion_id;
         const text = field(card, "Название и правило", "textarea", criterion.text);
         const section = field(card, "Секция", "input", criterion.section);
         const weight = field(card, "Вес", "input", criterion.weight);
@@ -390,7 +401,7 @@
         type.addEventListener('change', updateScale);
         updateScale();
         const read = () => ({
-          criterion_id: id.value.trim(),
+          criterion_id: criterionId,
           text: text.value,
           section: section.value,
           weight: weight.value.trim() === "" ? null : Number(weight.value),
@@ -434,13 +445,18 @@
         if (invalid >= 0) {
           const disclosure = criteriaPanel.children[invalid]; disclosure.open = true;
           disclosure.querySelector('input,textarea')?.focus();
-          throw new Error('Заполните название, секцию, ID и вес критерия №' + (invalid + 1));
+          throw new Error('Заполните название, секцию и вес критерия №' + (invalid + 1));
         }
         if (Math.abs(criteria.reduce((sum, c) => sum + c.weight, 0) - 100) > .000001) throw new Error('Сумма весов должна быть 100');
         const version = await api.saveVersion(list.id, { name: name.value, criteria });
+        list.latest_version = version;
+        chooser.selectedOptions[0].textContent = version.name;
+        panel.querySelector('h2').textContent = 'Редактирование версии ' + version.version;
         saved.textContent = "Сохранена версия " + version.version + ". Её можно выбрать в «Диалогах».";
       });
-    });
+    }
+    chooser.addEventListener('change', () => { selectedChecklistId = chooser.value; renderSelected(); });
+    renderSelected();
   }
 
   async function appeals(view) {
