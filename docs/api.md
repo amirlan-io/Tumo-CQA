@@ -109,3 +109,18 @@ POST /api/evaluations:
 
 Одна апелляция допускает одно решение. После закрытия можно создать новую апелляцию.
 При новой апелляции исходная оценка доступна в results, текущая — в final_results.
+
+## Официальный экспорт JSON 1.0
+
+POST /api/exports/submission с {dataset:"dev"|"prod",group_id,checklist_version,model,mode:"external_api"|"local"|"hybrid",team_name:"Tumo"} скачивает results.json.
+
+Экспорт использует исходные ответы ИИ подтверждённых завершённых заданий (до апелляций), выбранную версию и фактическую модель из оценки. Последнее задание определяет статус, ошибки не скрываются. Ручные и демо-оценки не включаются как успешные. Все 65/10 ID должны присутствовать, повторы и неподходящие каналы запрещены. Для официального экспорта пока поддерживается исходная конфигурация восьми критериев; изменённая рубрика требует согласованного mapping и отклоняется. mode задаётся оператором: backend не может автоматически определить локальность произвольного endpoint.
+
+Из корня репозитория при запущенном сервере:
+
+```powershell
+node scripts/export-submission.js --dataset dev --group DEV --version UUID --model stealth/crouton-alpha
+node scripts/export-submission.js --dataset prod --group GROUP_FROM_ORGANIZERS --version UUID --model stealth/crouton-alpha
+```
+
+Файлы сохраняются в results/dev/results.json и results/prod/results.json. Команда показывает число ok/error. Создание файлов не выполняет commit/push. Не выдавайте файл из одних ошибок за успешную оценку. Скрипт не вызывает модель и не передаёт транскрипты наружу.
