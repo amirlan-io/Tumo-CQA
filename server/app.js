@@ -1,4 +1,6 @@
 import express from 'express';
+import { validateResults } from './validate-results.js';
+import { installJobs } from './jobs.js';
 import { importRecords } from './import.js';
 import { fetchDataset } from './organizer.js';
 import { installChecklists, validateAnswers } from './checklists.js';
@@ -7,7 +9,7 @@ import { evaluationView, applyDecisions } from './score.js';
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const text = value => typeof value === 'string' && value.trim().length > 0;
 
-export function createApp(store, organizer = {}) {
+export function createApp(store, organizer = {}, ai = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '5mb' }));
@@ -18,6 +20,7 @@ export function createApp(store, organizer = {}) {
   };
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   installChecklists(app, store, get);
+  installJobs(app, store, get, ai);
   app.get('/api/conversations', (req, res) => res.json(store.list('conversation')));
   app.get('/api/conversations/:id', (req, res) => res.json(get('conversation', req.params.id)));
   app.post('/api/import', (req, res) => res.status(201).json(importRecords(store, req.body)));
@@ -52,19 +55,8 @@ export function createApp(store, organizer = {}) {
     const conversation = get('conversation', conversation_id);
     if (!text(checklist_version) || !Array.isArray(results) || !results.length)
       throw fail('Нужны checklist_version и results');
-    const ids = new Set();
     const version = get('checklist_version', checklist_version);
-    for (const r of results) {
-      if (!r || !text(r.criterion_id) || ids.has(r.criterion_id) || !text(r.explanation)
-        || !['yes', 'no', 'scale', 'na'].includes(r.answer)
-        || !(r.raw_score === null || (Number.isFinite(r.raw_score) && r.raw_score >= 0))
-        || !Array.isArray(r.evidence_message_nos)
-        || r.evidence_message_nos.some(n => !Number.isInteger(n) || n < 1 || n > conversation.transcript.length)
-        || (r.answer === 'na' && (!text(r.na_reason) || r.raw_score !== null)))
-        throw fail('Неверный результат критерия');
-      ids.add(r.criterion_id);
-    }
-    validateAnswers(version, results);
+    validateResults(conversation, version, results);
     res.status(201).json(evaluationView(store, store.add('evaluation', { conversation_id, checklist_version, results }, conversation_id)));
   });
   app.get('/api/evaluations/:id', (req, res) => {

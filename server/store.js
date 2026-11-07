@@ -16,6 +16,13 @@ export function createStore(path = ':memory:') {
     CREATE INDEX IF NOT EXISTS records_kind ON records(kind, parent_id);`);
   return {
     db,
+    update(kind, id, changes) {
+      const existing = this.get(kind, id);
+      if (!existing) throw new Error('Record not found');
+      const row = { ...existing, ...changes, id: existing.id, created_at: existing.created_at };
+      db.prepare('UPDATE records SET body=? WHERE kind=? AND id=?').run(JSON.stringify(row), kind, id);
+      return row;
+    },
     add(kind, body, parent = null) {
       const row = { ...body, id: randomUUID(), created_at: new Date().toISOString() };
       db.prepare('INSERT INTO records VALUES (?, ?, ?, ?, ?)')

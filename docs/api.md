@@ -1,5 +1,15 @@
 # API для команды
 
+## Запуск оценки и статусы
+
+POST /api/evaluation-jobs: `{ "conversation_id": "UUID диалога", "checklist_version": "UUID версии" }`. Ответ 202, Location и объект задания. GET /api/evaluation-jobs/:id — проверка статуса; GET /api/evaluation-jobs — список. Опрос раз в 1–2 секунды.
+
+Статусы: queued → running → completed / failed. При completed evaluation_id ведёт на GET /api/evaluations/:id. При failed поле error содержит безопасное объяснение. Сохраняются created_at, started_at и finished_at. Повторный запуск той же пары во время обработки возвращает существующее задание. После завершения разрешён новый запуск (кэш пока не реализован).
+
+Подключение ИИ: друг создаёт server/services/ai.js с экспортом evaluateDialogue(conversation, checklistVersion, {signal}). Возврат: `{model, prompt_version, results}`. В .env установить AI_ENABLED=true и перезапустить сервер. До подключения POST возвращает 503 без создания задания. Модуль должен учитывать signal для отмены HTTP-вызова. Тайм-аут сервера 60 секунд; поздний ответ не сохраняется. Задания выполняются последовательно в одном процессе сервера. При перезапуске незавершённые задания становятся failed: повторный запуск явный, чтобы не дублировать расход API.
+
+POST /api/evaluations сохраняет уже готовую оценку и остаётся доступным. Оба пути используют общую проверку результатов. Реальные облачные модели этим этапом не проверялись; тестовые функции используются только в tests/.
+
 ## Карточка проверяющего и экспорт
 
 GET /api/appeals/:id возвращает criterion, original, current, conversation, evidence, evaluation и decision. Это позволяет открыть спорную оценку и подтверждающие реплики одним запросом.
