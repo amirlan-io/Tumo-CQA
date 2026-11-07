@@ -55,6 +55,20 @@ test('import, evaluation, appeal and immutable review history', async () => {
     assert.equal(final.results[0].answer, 'no');
     assert.equal(final.final_results[0].answer, 'yes');
     assert.equal(final.decisions.length, 1);
+    assert.equal(final.original_score.total, 0);
+    assert.equal(final.final_score.total, 10);
+    const second = await request('/appeals', appealBody);
+    const confirmed = await request(`/appeals/${second.data.id}/decision`, { action: 'confirm', reason: 'Подтверждаю текущую оценку' });
+    assert.equal(confirmed.data.evaluation.final_score.total, 10);
+    const naAppeal = await request('/appeals', { ...appealBody, criterion_id: 'c3' });
+    const naDecision = await request(`/appeals/${naAppeal.data.id}/decision`, { action: 'change', reason: 'Идентификация не нужна',
+      replacement: { answer: 'na', raw_score: null, na_reason: 'Общий вопрос' } });
+    assert.equal(naDecision.data.evaluation.final_score.total, 12.5);
+    assert.equal(naDecision.data.evaluation.original_score.total, 0);
+    const invalidAppeal = await request('/appeals', { ...appealBody, criterion_id: 'c6' });
+    assert.equal((await request(`/appeals/${invalidAppeal.data.id}/decision`, { action: 'change', reason: 'Проверка шкалы',
+      replacement: { answer: 'scale', raw_score: 8 } })).status, 400);
+    assert.equal((await request(`/evaluations/${evaluation.data.id}`)).data.final_score.total, 12.5);
     assert.equal((await request('/import', { group_id: 'BAD', records: [{}] })).status, 400);
     assert.equal(store.list('conversation').length, 1);
   } finally {

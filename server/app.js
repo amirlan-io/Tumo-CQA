@@ -1,5 +1,6 @@
 import express from 'express';
 import { installChecklists, validateAnswers } from './checklists.js';
+import { evaluationView, applyDecisions } from './score.js';
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const text = value => typeof value === 'string' && value.trim().length > 0;
@@ -37,7 +38,7 @@ export function createApp(store) {
     }));
     res.status(201).json(result);
   });
-  app.get('/api/evaluations', (req, res) => res.json(store.list('evaluation')));
+  app.get('/api/evaluations', (req, res) => res.json(store.list('evaluation').map(e => evaluationView(store, e))));
   app.post('/api/evaluations', (req, res) => {
     const { conversation_id, checklist_version, results } = req.body;
     const conversation = get('conversation', conversation_id);
@@ -56,16 +57,11 @@ export function createApp(store) {
       ids.add(r.criterion_id);
     }
     validateAnswers(version, results);
-    res.status(201).json(store.add('evaluation', { conversation_id, checklist_version, results }, conversation_id));
+    res.status(201).json(evaluationView(store, store.add('evaluation', { conversation_id, checklist_version, results }, conversation_id)));
   });
   app.get('/api/evaluations/:id', (req, res) => {
     const original = get('evaluation', req.params.id);
-    const decisions = store.list('decision').filter(d => d.evaluation_id === original.id);
-    const final_results = original.results.map(r => {
-      const decision = decisions.filter(d => d.criterion_id === r.criterion_id).at(-1);
-      return decision?.action === 'change' ? { ...r, ...decision.replacement } : r;
-    });
-    res.json({ ...original, decisions, final_results });
+    res.json(evaluationView(store, original));
   });
   app.get('/api/appeals', (req, res) => res.json(store.list('appeal').map(a => ({ ...a,
     decision: store.list('decision').find(d => d.appeal_id === a.id) ?? null }))));
@@ -92,7 +88,8 @@ export function createApp(store) {
       if (action === 'change') {
         const evaluation = get('evaluation', appeal.evaluation_id);
         const version = get('checklist_version', evaluation.checklist_version);
-        validateAnswers(version, evaluation.results.map(r => r.criterion_id === appeal.criterion_id ? { ...r, ...replacement } : r));
+        const current = applyDecisions(evaluation.results, store.list('decision').filter(d => d.evaluation_id === evaluation.id));
+        validateAnswers(version, current.map(r => r.criterion_id === appeal.criterion_id ? { ...r, ...replacement } : r));
       }
       if (store.list('decision').some(d => d.appeal_id === appeal.id)) throw fail('Решение уже сохранено', 409);
       return store.add('decision', { appeal_id: appeal.id, evaluation_id: appeal.evaluation_id,
@@ -100,7 +97,7 @@ export function createApp(store) {
         replacement: action === 'change' ? { answer: replacement.answer, raw_score: replacement.raw_score,
           na_reason: replacement.na_reason ?? null } : null }, appeal.id);
     });
-    res.status(201).json(result);
+    res.status(201).json({ ...result, evaluation: evaluationView(store, get('evaluation', appeal.evaluation_id)) });
   });
   app.use((req, res) => res.status(404).json({ error: 'Адрес не найден' }));
   app.use((error, req, res, next) => {

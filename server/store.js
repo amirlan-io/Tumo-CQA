@@ -25,7 +25,7 @@ export function createStore(path = ':memory:') {
       return row ? JSON.parse(row.body) : null;
     },
     list(kind) {
-      return db.prepare('SELECT body FROM records WHERE kind=? ORDER BY created_at, id').all(kind)
+      return db.prepare('SELECT body FROM records WHERE kind=? ORDER BY rowid').all(kind)
         .map(row => JSON.parse(row.body));
     },
     transaction(fn) {
