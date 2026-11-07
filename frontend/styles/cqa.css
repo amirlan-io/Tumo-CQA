@@ -1,0 +1,36 @@
+#cqa-app {
+  max-width: 72rem;
+  margin: auto;
+  padding: clamp(.75rem, 3vw, 2rem);
+  color: #15231c;
+  background: #f1f6f2;
+  font: 1rem/1.5 system-ui, sans-serif;
+  overflow-wrap: anywhere;
+  container-type: inline-size;
+}
+
+#cqa-app header p { color: #246144; font-weight: 650; }
+#cqa-app h1, #cqa-app h2 { line-height: 1.2; }
+#cqa-app .cqa-grid { display: grid; gap: 1rem; margin-top: 1rem; }
+
+@container (min-width: 47rem) {
+  #cqa-app .cqa-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+}
+
+#cqa-app section { background: white; border: 1px solid #c9d9cd; border-radius: .75rem; padding: 1rem; }
+#cqa-app ol { padding-inline-start: 1.75rem; }
+#cqa-app li { padding: .5rem; border-radius: .4rem; }
+#cqa-app li p { margin: .25rem 0; }
+#cqa-app .cqa-evidence { background: #fff2b5; outline: 2px solid #816000; }
+#cqa-app button {
+  max-width: 100%;
+  padding: .55rem .8rem;
+  border: 0;
+  border-radius: .4rem;
+  background: #185b3a;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+#cqa-app a { color: #185b3a; }
+#cqa-app :focus-visible { outline: 2px solid #155e98; outline-offset: 3px; }
