@@ -6,7 +6,9 @@ import { randomUUID } from 'node:crypto';
 export function createStore(path = ':memory:') {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
-  db.exec(`PRAGMA foreign_keys=ON;
+  db.exec(`PRAGMA journal_mode=WAL;
+    PRAGMA busy_timeout=5000;
+    PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS records (
       id TEXT PRIMARY KEY, kind TEXT NOT NULL, parent_id TEXT,
       body TEXT NOT NULL, created_at TEXT NOT NULL

@@ -32,6 +32,21 @@ export function createApp(store, organizer = {}) {
     }
   });
   app.get('/api/evaluations', (req, res) => res.json(store.list('evaluation').map(e => evaluationView(store, e))));
+  app.get('/api/exports/evaluations.csv', (req, res) => {
+    const cell = value => {
+      let s = value == null ? '' : String(value);
+      if (/^[=+@\-\t\r]/.test(s)) s = "'" + s;
+      return '"' + s.replaceAll('"', '""') + '"';
+    };
+    const rows = [['evaluation_id', 'conversation_id', 'language', 'checklist_version', 'original_total', 'final_total', 'gross_error']];
+    for (const e of store.list('evaluation')) {
+      const view = evaluationView(store, e);
+      const c = get('conversation', e.conversation_id);
+      rows.push([e.id, c.conversation_id, c.language, e.checklist_version,
+        view.original_score.total, view.final_score.total, view.final_score.gross_error]);
+    }
+    res.type('text/csv; charset=utf-8').attachment('evaluations.csv').send('\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n'));
+  });
   app.post('/api/evaluations', (req, res) => {
     const { conversation_id, checklist_version, results } = req.body;
     const conversation = get('conversation', conversation_id);
@@ -58,6 +73,18 @@ export function createApp(store, organizer = {}) {
   });
   app.get('/api/appeals', (req, res) => res.json(store.list('appeal').map(a => ({ ...a,
     decision: store.list('decision').find(d => d.appeal_id === a.id) ?? null }))));
+  app.get('/api/appeals/:id', (req, res) => {
+    const appeal = get('appeal', req.params.id);
+    const evaluation = evaluationView(store, get('evaluation', appeal.evaluation_id));
+    const conversation = get('conversation', evaluation.conversation_id);
+    const version = get('checklist_version', evaluation.checklist_version);
+    const original = evaluation.results.find(r => r.criterion_id === appeal.criterion_id);
+    const current = evaluation.final_results.find(r => r.criterion_id === appeal.criterion_id);
+    res.json({ ...appeal, decision: evaluation.decisions.find(d => d.appeal_id === appeal.id) ?? null,
+      criterion: version.criteria.find(c => c.criterion_id === appeal.criterion_id),
+      original, current, conversation, evaluation,
+      evidence: conversation.transcript.filter(m => current.evidence_message_nos.includes(m.message_no)) });
+  });
   app.post('/api/appeals', (req, res) => {
     const { evaluation_id, criterion_id, comment } = req.body;
     const evaluation = get('evaluation', evaluation_id);

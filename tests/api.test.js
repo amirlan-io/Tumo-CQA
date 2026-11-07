@@ -55,6 +55,14 @@ test('import, evaluation, appeal and immutable review history', async () => {
     assert.equal(final.results[0].answer, 'no');
     assert.equal(final.final_results[0].answer, 'yes');
     assert.equal(final.decisions.length, 1);
+    const card = await request(`/appeals/${appeal.data.id}`);
+    assert.equal(card.data.original.answer, 'no');
+    assert.equal(card.data.current.answer, 'yes');
+    assert.equal(card.data.evidence[0].message_no, 1);
+    const csv = await fetch(`http://127.0.0.1:${server.address().port}/api/exports/evaluations.csv`);
+    assert.equal(csv.status, 200);
+    assert.match(csv.headers.get('content-type'), /text\/csv/);
+    assert.match(await csv.text(), /original_total/);
     assert.equal(final.original_score.total, 0);
     assert.equal(final.final_score.total, 10);
     const second = await request('/appeals', appealBody);

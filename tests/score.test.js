@@ -8,6 +8,16 @@ const full = () => version.criteria.map(c => ({ criterion_id: c.criterion_id,
   answer: c.is_gross_error ? 'no' : c.answer_type === 'scale' ? 'scale' : 'yes',
   raw_score: c.is_gross_error ? null : c.answer_type === 'scale' ? Math.max(...c.scale.map(s => s.value)) : 1 }));
 
+test('worked example from action plan: 50.5 out of 85 is 59.41', () => {
+  const answers = full();
+  answers[1] = { criterion_id: 'c2', answer: 'na', raw_score: null, na_reason: 'Данных достаточно' };
+  answers[2] = { ...answers[2], answer: 'no', raw_score: 0 };
+  answers[3].raw_score = 15;
+  answers[5].raw_score = 7;
+  answers[6] = { ...answers[6], answer: 'no', raw_score: 0 };
+  assert.equal(calculateScore(version, answers).total, 59.41);
+});
+
 test('full score and sections, gross error does not zero score', () => {
   const answers = full();
   const score = calculateScore(version, answers);
