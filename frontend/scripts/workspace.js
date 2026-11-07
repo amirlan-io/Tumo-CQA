@@ -232,6 +232,13 @@
     const versions = (await Promise.all(lists.map(list => api.versions(list.id)))).flat();
     if (!details.isConnected || details.dataset.dialogId !== id) return;
     details.replaceChildren();
+    details.tabIndex = -1;
+    const heading = add(details, 'h2', 'Карточка диалога · ' + record.conversation_id);
+    button(details, 'Вернуться к списку', () => {
+      details.replaceChildren();
+      const list = content.querySelector('.cqa-dialog-list');
+      list?.scrollIntoView?.({ block: 'start' });
+    }).className = 'cqa-secondary';
     const grid = add(details, "div");
     grid.className = "cqa-grid";
     const rows = transcript(add(grid, "section"), record);
@@ -335,8 +342,12 @@
       });
     }
     versionSelect.addEventListener("change", () => { form.replaceChildren(); output.replaceChildren(); jobStatus.textContent = ""; });
-    evaluations.filter(item => item.conversation_id === record.id).forEach((item, index) =>
+    const savedEvaluations = evaluations.filter(item => item.conversation_id === record.id);
+    savedEvaluations.forEach((item, index) =>
       button(review, "Открыть оценку " + (index + 1) + " · " + total(item.final_score), () => show(item)));
+    if (savedEvaluations.length) show(savedEvaluations.at(-1));
+    details.focus({ preventScroll: true });
+    heading.scrollIntoView?.({ block: 'start' });
   }
 
   let selectedChecklistId = null;

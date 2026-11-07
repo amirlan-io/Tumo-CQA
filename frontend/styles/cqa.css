@@ -205,3 +205,7 @@ audio { display:block; width:100%; margin:16px 0; }
 #cqa-app .cqa-criterion-disclosure .cqa-criterion-editor { border:0; border-top:1px solid var(--cqa-border); border-radius:0; margin:0; box-shadow:none; }
 #cqa-app .cqa-weight-meter { position:sticky; top:8px; z-index:2; padding:14px 18px; border-radius:10px; background:#fff2d7; color:#664500; border:1px solid #cdb16d; }
 #cqa-app .cqa-weight-meter[data-valid="true"] { background:#e7f5eb; color:#155636; border-color:#8fbaa0; }
+
+#cqa-app .cqa-dialog-list { max-height:520px; overflow-y:auto; overscroll-behavior:contain; }
+#cqa-app .cqa-dialog-list > h2 { position:sticky; top:-24px; background:white; padding:12px 0; z-index:1; }
+#cqa-app h2 { scroll-margin-top:24px; }
