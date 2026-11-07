@@ -185,3 +185,13 @@ body { margin: 0; }
  #cqa-app .cqa-toolbar > h2 { grid-column:1/-1; }
  #cqa-app .cqa-toolbar label { max-width:none; }
 }
+
+/* Explicit groups keep labels and their actions aligned. */
+#cqa-app .cqa-toolbar { display:block; }
+#cqa-app .cqa-import-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+#cqa-app .cqa-import-controls > div { display:flex; flex-direction:column; align-items:flex-start; }
+#cqa-app .cqa-import-controls label { width:100%; max-width:none; margin:8px 0 12px; }
+#cqa-app .cqa-import-controls button { margin:0; }
+#cqa-app .cqa-demo-controls { margin-top:24px; padding-top:16px; border-top:1px solid var(--cqa-border); }
+#cqa-app .cqa-demo-controls button { margin:0; }
+@media(max-width:700px) { #cqa-app .cqa-import-controls { grid-template-columns:minmax(0,1fr); gap:20px; } }

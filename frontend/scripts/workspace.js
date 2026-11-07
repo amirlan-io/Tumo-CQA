@@ -144,7 +144,11 @@
     const toolbar = add(view, "section");
     toolbar.className = "cqa-toolbar";
     add(toolbar, "h2", "Загрузка диалогов");
-    const group = field(toolbar, "Идентификатор группы", "input", "DEV");
+    const controls = add(toolbar, 'div'); controls.className = 'cqa-import-controls';
+    const importPanel = add(controls, 'div');
+    const evaluatePanel = add(controls, 'div');
+    const demoPanel = add(toolbar, 'div'); demoPanel.className = 'cqa-demo-controls';
+    const group = field(importPanel, "Идентификатор группы", "input", "DEV");
     const summary = add(view, "div");
     summary.className = "cqa-summary";
     const list = add(view, "div");
@@ -169,16 +173,16 @@
         button(row, "Открыть " + record.conversation_id + " · " + record.language, () => openDialog(details, record.id)).className = 'cqa-secondary';
       });
     }
-    button(toolbar, "Загрузить группу", async () => {
+    button(importPanel, "Загрузить группу", async () => {
       const id = group.value.trim();
       await api.importGroup(id);
       await refresh(id);
     });
-    button(toolbar, "Загрузить вымышленный диалог", async () => {
+    button(demoPanel, "Загрузить вымышленный диалог", async () => {
       await api.importDemo();
       await refresh("DEMO");
     }).classList.add("cqa-secondary");
-    const batchVersions = field(toolbar, 'Чек-лист для оценки группы', 'select');
+    const batchVersions = field(evaluatePanel, 'Чек-лист для оценки группы', 'select');
     (await api.checklists()).forEach(c => option(batchVersions, c.latest_version.id, c.latest_version.name + ' · v' + c.latest_version.version));
     const batchStatus = add(toolbar, 'div');
     async function monitorBatch(id) {
@@ -191,7 +195,7 @@
         });
       }, () => view.isConnected);
     }
-    button(toolbar, 'Оценить группу через ИИ', async () => {
+    button(evaluatePanel, 'Оценить группу через ИИ', async () => {
       const batch = await api.startBatch({ group_id: group.value.trim(), checklist_version: batchVersions.value });
       await monitorBatch(batch.id);
     });
