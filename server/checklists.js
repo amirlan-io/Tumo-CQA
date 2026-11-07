@@ -2,8 +2,8 @@ const text = x => typeof x === 'string' && x.trim().length > 0 && x.length <= 10
 const invalid = message => { throw Object.assign(new Error(message), { status: 400 }); };
 
 export function validateConfig(input) {
-  if (!input || !text(input.name) || !Array.isArray(input.criteria) || input.criteria.length !== 8)
-    invalid('Нужны название и ровно 8 критериев');
+  if (!input || !text(input.name) || !Array.isArray(input.criteria) || (input.criteria.length < 1 || input.criteria.length > 50))
+    invalid('Нужны название и от 1 до 50 критериев');
   const ids = new Set();
   const criteria = input.criteria.map(c => {
     if (!c || !text(c.criterion_id) || ids.has(c.criterion_id) || !text(c.text) || !text(c.section)

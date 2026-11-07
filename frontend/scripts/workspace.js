@@ -23,14 +23,16 @@
     return control;
   }
 
+  let actionSequence = 0;
   async function run(action, control) {
+    const sequence = ++actionSequence;
     status.textContent = "Загрузка…";
     if (control) control.disabled = true;
     try {
       await action();
-      status.textContent = "";
+      if (sequence === actionSequence) status.textContent = "";
     } catch (error) {
-      status.textContent = error.message;
+      if (sequence === actionSequence) { status.textContent = error.message; status.scrollIntoView?.({ block: "nearest" }); }
     } finally {
       if (control) control.disabled = false;
     }
@@ -48,6 +50,8 @@
   }
 
   function navigate(page) {
+    if (!pages[page]) page = "dialogs";
+    if (location.hash !== "#" + page) history.pushState(null, "", "#" + page);
     const view = document.createElement("div");
     content.replaceChildren(view);
     const [title, description, render] = pages[page];
@@ -74,6 +78,11 @@
         link.href = audio;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
+        const player = add(parent, 'audio');
+        player.controls = true;
+        player.preload = 'none';
+        player.src = audio;
+        player.setAttribute('aria-label', 'Запись звонка');
       } else {
         add(parent, "p", "Запись недоступна.");
       }
@@ -83,6 +92,7 @@
     const rows = new Map();
     record.transcript.forEach(turn => {
       const row = add(list, "li");
+      row.dataset.speaker = turn.speaker;
       row.tabIndex = -1;
       add(row, "strong", turn.timestamp + " · " + turn.speaker);
       add(row, "p", turn.text);
@@ -143,28 +153,65 @@
     const toolbar = add(view, "section");
     toolbar.className = "cqa-toolbar";
     add(toolbar, "h2", "Загрузка диалогов");
-    const group = field(toolbar, "Идентификатор группы", "input", "DEV");
+    const controls = add(toolbar, 'div'); controls.className = 'cqa-import-controls';
+    const importPanel = add(controls, 'div');
+    const evaluatePanel = add(controls, 'div');
+    const demoPanel = add(toolbar, 'div'); demoPanel.className = 'cqa-demo-controls';
+    const group = field(importPanel, "Идентификатор группы", "input", "DEV");
+    const upload = field(demoPanel, 'Загрузить транскрипт из JSON', 'input');
+    upload.type = 'file'; upload.accept = '.json,application/json';
+    button(demoPanel, 'Импортировать JSON', async () => {
+      const file = upload.files[0];
+      if (!file) throw new Error('Выберите JSON-файл');
+      if (file.size > 5 * 1024 * 1024) throw new Error('Файл должен быть не больше 5 МБ');
+      let data;
+      try { data = JSON.parse(await file.text()); } catch { throw new Error('Файл не содержит корректный JSON'); }
+      const records = Array.isArray(data) ? data : data.records ?? data.data?.records ?? [data];
+      const groupId = group.value.trim() || 'UPLOAD';
+      await api.importJson({ group_id: groupId, records });
+      await refresh(groupId);
+    });
+    const summary = add(view, "div");
+    summary.className = "cqa-summary";
     const list = add(view, "div");
-    const details = add(view, "div");
+    list.className = "cqa-dialog-list";
+    const details = add(view, "dialog");
+    details.className = 'cqa-dialog-modal';
+    details.setAttribute('aria-label', 'Диалог и оценка');
+    const closeDetails = () => { details.close(); };
+    details.addEventListener('click', event => { if (event.target === details) {
+      const bounds = details.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeDetails();
+    } });
     async function refresh(groupId) {
       const records = await api.conversations();
       list.replaceChildren();
       details.replaceChildren();
       const visible = records.filter(record => !groupId || record.group_id === groupId);
-      if (!visible.length) add(list, "p", "Диалогов пока нет.");
-      visible.forEach(record => button(list, "Открыть " + record.conversation_id + " · " + record.language,
-        () => openDialog(details, record.id)));
+      summary.replaceChildren();
+      [['Все диалоги', visible.length], ['Чаты', visible.filter(c => c.channel === 'agent chat').length], ['Звонки', visible.filter(c => c.channel === 'voice call').length]].forEach(([label, count]) => {
+        const card = add(summary, 'div'); add(card, 'span', label); add(card, 'strong', String(count));
+      });
+      add(list, 'h2', 'Диалоги · ' + visible.length);
+      if (!visible.length) add(list, "p", "Загрузите группу, чтобы начать оценку качества.");
+      visible.forEach(record => {
+        const row = add(list, 'div'); row.className = 'cqa-dialog-row';
+        const identity = add(row, 'div'); add(identity, 'strong', record.conversation_id);
+        add(identity, 'small', record.group_id + ' · ' + (record.channel === 'voice call' ? 'Звонок' : 'Чат'));
+        const language = add(row, 'span', record.language); language.className = 'cqa-badge';
+        button(row, "Открыть " + record.conversation_id + " · " + record.language, () => openDialog(details, record.id)).className = 'cqa-secondary';
+      });
     }
-    button(toolbar, "Загрузить группу", async () => {
+    button(importPanel, "Загрузить группу", async () => {
       const id = group.value.trim();
       await api.importGroup(id);
       await refresh(id);
     });
-    button(toolbar, "Загрузить вымышленный диалог", async () => {
+    button(demoPanel, "Загрузить вымышленный диалог", async () => {
       await api.importDemo();
       await refresh("DEMO");
     }).classList.add("cqa-secondary");
-    const batchVersions = field(toolbar, 'Чек-лист для оценки группы', 'select');
+    const batchVersions = field(evaluatePanel, 'Чек-лист для оценки группы', 'select');
     (await api.checklists()).forEach(c => option(batchVersions, c.latest_version.id, c.latest_version.name + ' · v' + c.latest_version.version));
     const batchStatus = add(toolbar, 'div');
     async function monitorBatch(id) {
@@ -177,7 +224,7 @@
         });
       }, () => view.isConnected);
     }
-    button(toolbar, 'Оценить группу через ИИ', async () => {
+    button(evaluatePanel, 'Оценить группу через ИИ', async () => {
       const batch = await api.startBatch({ group_id: group.value.trim(), checklist_version: batchVersions.value });
       await monitorBatch(batch.id);
     });
@@ -187,9 +234,16 @@
   }
 
   async function openDialog(details, id) {
+    details.dataset.dialogId = id;
     const [record, lists, evaluations] = await Promise.all([api.conversation(id), api.checklists(), api.evaluations()]);
     const versions = (await Promise.all(lists.map(list => api.versions(list.id)))).flat();
+    if (!details.isConnected || details.dataset.dialogId !== id) return;
     details.replaceChildren();
+    details.tabIndex = -1;
+    const close = button(details, 'Закрыть ×', () => details.close());
+    close.className = 'cqa-modal-close';
+    const heading = add(details, 'h2', 'Диалог · ' + record.conversation_id);
+
     const grid = add(details, "div");
     grid.className = "cqa-grid";
     const rows = transcript(add(grid, "section"), record);
@@ -197,6 +251,8 @@
     const versionSelect = field(review, "Версия чек-листа", "select");
     versions.forEach(version => option(versionSelect, version.id, version.name + " · v" + version.version));
     versionSelect.value = versions.at(-1)?.id || "";
+    const actions = add(review, "div");
+    actions.className = "cqa-actions";
     const form = add(review, "div");
     const output = add(review, "div");
 
@@ -205,6 +261,7 @@
       const version = versions.find(item => item.id === evaluation.checklist_version);
       add(output, "h2", "Итог · " + total(evaluation.final_score));
       add(output, "p", "Исходный итог · " + total(evaluation.original_score));
+      evaluation.decisions.forEach(d => add(output, 'p', 'Решение проверяющего · ' + d.criterion_id + ' · ' + (d.action === 'change' ? 'Изменено' : 'Подтверждено') + ' · ' + d.reason));
       add(output, "p", "Грубые ошибки · " + (evaluation.final_score.gross_error ? "Да" : "Нет"));
       evaluation.final_score.sections.forEach(section =>
         add(output, "p", section.section + " · " + (section.points ?? "—") + " / " + (section.maximum ?? "—")));
@@ -219,9 +276,16 @@
         add(card, "p", original.explanation);
         if (result.na_reason) add(card, "p", "Причина N/A · " + result.na_reason);
         evidence(card, original.evidence_message_nos, rows);
-        const comment = field(card, "Комментарий к апелляции", "textarea");
+        if (original.checked_range) {
+          const range = original.checked_range;
+          evidence(card, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i), rows);
+          add(card, 'p', 'Проверенный участок: реплики ' + range.from + '–' + range.to);
+        }
+        const appealForm = add(card, "details");
+        add(appealForm, "summary", "Оспорить оценку");
+        const comment = field(appealForm, "Комментарий к апелляции", "textarea");
         const message = add(card, "p");
-        button(card, "Подать апелляцию", async () => {
+        button(appealForm, "Подать апелляцию", async () => {
           await api.appeal({ evaluation_id: evaluation.id, criterion_id: criterion.criterion_id, comment: comment.value });
           comment.value = "";
           message.textContent = "Апелляция сохранена.";
@@ -240,8 +304,13 @@
         const read = answerFields(card, criterion);
         const explanation = field(card, "Объяснение", "textarea");
         const numbers = field(card, "Номера реплик через запятую, включая проверенный участок");
+        const missed = field(card, 'Действие пропущено', 'input'); missed.type = 'checkbox';
+        const from = field(card, 'Начало проверенного участка (номер реплики)'); from.type = 'number'; from.min = 1;
+        const to = field(card, 'Конец проверенного участка (номер реплики)'); to.type = 'number'; to.min = 1;
         return () => ({
           ...read(),
+          missed_action: missed.checked,
+          checked_range: from.value || to.value ? { from: Number(from.value), to: Number(to.value) } : null,
           criterion_id: criterion.criterion_id,
           explanation: explanation.value.trim(),
           evidence_message_nos: numbers.value.trim() ? numbers.value.split(",").map(value => Number(value.trim())) : []
@@ -252,17 +321,20 @@
       });
     }
 
-    const jobStatus = add(review, 'p');
-    button(review, 'Оценить через ИИ', async () => {
+    const jobStatus = add(actions, 'p');
+    button(actions, 'Оценить через ИИ', async () => {
       const job = await api.startJob({ conversation_id: record.id, checklist_version: versionSelect.value });
       const done = await watch(() => api.job(job.id), item => {
         jobStatus.textContent = jobLabels[item.status] + (item.cache_hit ? ' · из кэша' : '') + (item.error ? ' · ' + item.error : '');
       }, () => review.isConnected);
-      if (done?.status === 'completed') show(await api.evaluation(done.evaluation_id));
+      if (done?.status === 'completed' && review.isConnected) {
+        const evaluation = await api.evaluation(done.evaluation_id);
+        if (evaluation.checklist_version === versionSelect.value) show(evaluation);
+      }
     });
-    button(review, "Заполнить оценку вручную", editAnswers);
+    button(actions, "Заполнить оценку вручную", editAnswers);
     if (record.group_id === "DEMO" && record.conversation_id === "DEMO-001") {
-      button(review, "Запустить оценку на вымышленных ответах", async () => {
+      button(actions, "Запустить оценку на вымышленных ответах", async () => {
         const version = versions.find(item => item.id === versionSelect.value);
         if (version?.version !== 1 || version.name !== "Freedom Broker — качество диалогов") {
           throw new Error("Готовые ответы подготовлены для v1. Для новой версии заполни ответы вручную.");
@@ -274,54 +346,143 @@
         }));
       });
     }
-    versionSelect.addEventListener("change", () => form.replaceChildren());
-    evaluations.filter(item => item.conversation_id === record.id).forEach((item, index) =>
+    versionSelect.addEventListener("change", () => { form.replaceChildren(); output.replaceChildren(); jobStatus.textContent = ""; });
+    const savedEvaluations = evaluations.filter(item => item.conversation_id === record.id);
+    savedEvaluations.forEach((item, index) =>
       button(review, "Открыть оценку " + (index + 1) + " · " + total(item.final_score), () => show(item)));
+    if (savedEvaluations.length) show(savedEvaluations.at(-1));
+    if (typeof details.showModal === 'function' && !details.open) details.showModal();
+    close.focus({ preventScroll: true });
+    details.scrollTop = 0;
   }
 
+  let selectedChecklistId = null;
   async function checklists(view) {
     const lists = await api.checklists();
-    lists.forEach(list => {
-      const panel = add(view, "section");
+    const chooser = field(view, 'Выберите чек-лист', 'select');
+    lists.forEach(list => option(chooser, list.id, list.latest_version.name));
+    chooser.value = lists.some(list => list.id === selectedChecklistId) ? selectedChecklistId : lists[0]?.id || '';
+    selectedChecklistId = chooser.value;
+    const editor = add(view, 'div');
+    const intro = add(view, 'p', 'Готовые правила уже заполнены. Меняйте их только при необходимости. Для оценки разговора перейдите в «Диалоги».');
+    intro.className = 'cqa-help';
+    view.insertBefore(intro, chooser.parentElement);
+    const createPanel = add(view, 'details');
+    add(createPanel, 'summary', 'Создать отдельный чек-лист');
+    const newName = field(createPanel, 'Название нового чек-листа');
+    button(createPanel, 'Создать на основе текущего', async () => {
+      if (!lists.length) throw new Error('Нет начального чек-листа');
+      const source = lists.find(list => list.id === chooser.value);
+      const created = await api.createChecklist({ ...source.latest_version, name: newName.value });
+      selectedChecklistId = created.checklist_id;
+      await navigate('checklists');
+    });
+    function renderSelected() {
+      editor.replaceChildren();
+      const list = lists.find(list => list.id === chooser.value);
+      if (!list) return;
+      const panel = add(editor, "section");
       const name = field(panel, "Название чек-листа", "input", list.latest_version.name);
       add(panel, "h2", "Редактирование версии " + list.latest_version.version);
-      const readCriteria = list.latest_version.criteria.map(criterion => {
-        const card = add(panel, "fieldset");
-        add(card, "legend", criterion.criterion_id + " · " + criterion.section);
-        const id = field(card, "ID критерия (измени при замене)", "input", criterion.criterion_id);
-        const text = field(card, "Название и правило", "textarea", criterion.text);
-        const section = field(card, "Секция", "input", criterion.section);
-        const weight = field(card, "Вес", "input", criterion.weight);
+      const readCriteria = [];
+      const meter = add(panel, 'p'); meter.className = 'cqa-weight-meter'; meter.setAttribute('role', 'status');
+      const criteriaPanel = add(panel, "div");
+      function updateMeter() {
+        const sum = readCriteria.reduce((n, read) => n + (read().weight ?? 0), 0);
+        meter.textContent = 'Критериев: ' + readCriteria.length + ' · Сумма весов: ' + sum + ' / 100' + (Math.abs(sum - 100) < .000001 ? ' · Можно сохранять' : ' · Скорректируйте веса');
+        meter.dataset.valid = String(Math.abs(sum - 100) < .000001);
+      }
+      function appendCriterion(criterion) {
+        const disclosure = add(criteriaPanel, 'details'); disclosure.className = 'cqa-criterion-disclosure';
+        disclosure.open = !criterion.text;
+        const summary = add(disclosure, 'summary');
+        const title = add(summary, 'strong', criterion.text.split(':')[0].split('.')[0] || 'Новый критерий');
+        const meta = add(summary, 'span');
+        const card = add(disclosure, "fieldset");
+        card.className = "cqa-criterion-editor";
+        add(card, "legend", "Настройки критерия");
+        const criterionId = criterion.criterion_id;
+        const text = field(card, "Что должен сделать оператор?", "textarea", criterion.text);
+        const section = field(card, "Раздел проверки", "input", criterion.section);
+        const weight = field(card, "Максимум баллов", "input", criterion.weight);
         weight.type = "number";
         weight.min = 0;
-        const type = field(card, "Тип ответа", "select");
+        const type = field(card, "Как оценивать?", "select");
         option(type, "boolean", "Да / Нет");
         option(type, "scale", "Шкала");
         type.value = criterion.answer_type;
-        const scale = field(card, "Ступени: одна строка на ступень, число | описание", "textarea",
-          criterion.scale.map(step => step.value + " | " + step.description).join("\n"));
-        const na = field(card, "Условие N/A (пусто, если запрещено)", "textarea", criterion.na_rule || "");
-        return () => ({
-          criterion_id: id.value.trim(),
+        const scalePanel = add(card, 'div'); scalePanel.className = 'cqa-wide cqa-scale-panel';
+        add(scalePanel, 'p', 'Баллы и условия их получения');
+        const scaleRows = [];
+        function addStep(step = {value:0,description:''}) {
+          const row = add(scalePanel, 'div'); row.className = 'cqa-scale-row';
+          const value = field(row, 'Баллы', 'input', step.value); value.type = 'number'; value.min = 0;
+          const description = field(row, 'За что поставить', 'textarea', step.description);
+          const read = () => ({value:value.value.trim() === '' ? null : Number(value.value),description:description.value.trim()});
+          scaleRows.push(read);
+          button(row, 'Убрать ступень', () => { scaleRows.splice(scaleRows.indexOf(read),1);row.remove(); }).className = 'cqa-secondary';
+        }
+        criterion.scale.forEach(addStep);
+        button(scalePanel, 'Добавить ступень', () => addStep()).className = 'cqa-secondary';
+        const naAllowed = field(card, 'Можно не оценивать, если правило неприменимо?', 'input'); naAllowed.type='checkbox';naAllowed.checked=criterion.allow_na;
+        const na = field(card, 'Когда это правило не применяется?', 'textarea', criterion.na_rule || '');
+        text.parentElement.className = 'cqa-wide'; na.parentElement.className = 'cqa-wide';
+        const updateOptions = () => { scalePanel.hidden = type.value !== 'scale';na.parentElement.hidden=!naAllowed.checked; };
+        type.addEventListener('change',updateOptions);naAllowed.addEventListener('change',updateOptions);updateOptions();
+        const read = () => ({
+          criterion_id: criterionId,
           text: text.value,
           section: section.value,
           weight: weight.value.trim() === "" ? null : Number(weight.value),
           answer_type: type.value,
-          allow_na: Boolean(na.value.trim()),
-          na_rule: na.value,
+          allow_na: naAllowed.checked,
+          na_rule: naAllowed.checked ? na.value : null,
           is_gross_error: criterion.is_gross_error,
-          scale: type.value === "scale" ? scale.value.trim().split("\n").map(line => {
-            const [value, ...description] = line.split("|");
-            return { value: value.trim() === "" ? null : Number(value.trim()), description: description.join("|").trim() };
-          }) : []
+          scale: type.value === "scale" ? scaleRows.map(read => read()) : []
         });
-      });
+        readCriteria.push(read);
+        function updateSummary() {
+          title.textContent = text.value.trim().split(':')[0].split('.')[0] || 'Новый критерий';
+          meta.textContent = (criterion.is_gross_error ? 'Без баллов' : 'Вес ' + (weight.value || 0)) + ' · ' + (type.value === 'scale' ? 'Шкала' : 'Да / Нет') + (naAllowed.checked ? ' · Можно пропустить' : '');
+          updateMeter();
+        }
+        card.addEventListener('input', updateSummary);
+        card.addEventListener('change', updateSummary);
+        updateSummary();
+        button(card, 'Удалить критерий', () => {
+          readCriteria.splice(readCriteria.indexOf(read), 1);
+          disclosure.remove();
+          updateMeter();
+        }).className = 'cqa-secondary';
+      }
+      list.latest_version.criteria.forEach(appendCriterion);
+      const shortcuts = add(panel, 'div'); shortcuts.className = 'cqa-actions';
+      button(shortcuts, 'Раскрыть все', () => criteriaPanel.querySelectorAll('details').forEach(d => { d.open = true; })).className = 'cqa-secondary';
+      button(shortcuts, 'Свернуть все', () => criteriaPanel.querySelectorAll('details').forEach(d => { d.open = false; })).className = 'cqa-secondary';
+      button(panel, 'Добавить критерий', () => appendCriterion({
+        criterion_id: 'new-' + Date.now(), text: '', section: 'Новая секция', weight: 0,
+        answer_type: 'boolean', scale: [], na_rule: null, is_gross_error: false
+      }));
+      add(panel, 'p', 'Сумма весов должна быть 100. Удаление действует только в новой версии.');
       const saved = add(panel, "p");
       button(panel, "Сохранить новую версию", async () => {
-        const version = await api.saveVersion(list.id, { name: name.value, criteria: readCriteria.map(read => read()) });
+        const criteria = readCriteria.map(read => read());
+        const invalid = criteria.findIndex(c => !c.text.trim() || !c.section.trim() || !c.criterion_id || c.weight === null || c.weight < 0);
+        if (invalid >= 0) {
+          const disclosure = criteriaPanel.children[invalid]; disclosure.open = true;
+          disclosure.querySelector('input,textarea')?.focus();
+          throw new Error('Заполните название, секцию и вес критерия №' + (invalid + 1));
+        }
+        if (Math.abs(criteria.reduce((sum, c) => sum + c.weight, 0) - 100) > .000001) throw new Error('Сумма весов должна быть 100');
+        const version = await api.saveVersion(list.id, { name: name.value, criteria });
+        list.latest_version = version;
+        chooser.selectedOptions[0].textContent = version.name;
+        panel.querySelector('h2').textContent = 'Редактирование версии ' + version.version;
         saved.textContent = "Сохранена версия " + version.version + ". Её можно выбрать в «Диалогах».";
       });
-    });
+    }
+    chooser.addEventListener('change', () => { selectedChecklistId = chooser.value; renderSelected(); });
+    renderSelected();
   }
 
   async function appeals(view) {
@@ -345,6 +506,11 @@
     add(panel, "p", "Исходный ответ · " + answerText(appeal.original));
     add(panel, "p", appeal.original.explanation);
     evidence(panel, appeal.original.evidence_message_nos, rows);
+    if (appeal.original.checked_range) {
+      const range = appeal.original.checked_range;
+      add(panel, 'p', 'Проверенный участок: ' + range.from + '–' + range.to);
+      evidence(panel, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i), rows);
+    }
     add(panel, "p", "Текущий ответ · " + answerText(appeal.current));
     add(panel, "p", "Исходный итог · " + total(appeal.evaluation.original_score));
     add(panel, "p", "Текущий итог · " + total(appeal.evaluation.final_score));
@@ -362,5 +528,6 @@
     button(panel, "Изменить ответ", () => decide("change", read()));
   }
 
-  run(() => navigate("dialogs"));
+  window.addEventListener("popstate", () => run(() => navigate(location.hash.slice(1))));
+  run(() => navigate(location.hash.slice(1) || "dialogs"));
 })();

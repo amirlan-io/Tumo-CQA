@@ -13,6 +13,22 @@ export function validateResults(conversation, version, results) {
         || (r.answer === 'na' && (!text(r.na_reason) || r.raw_score !== null)))
         throw fail('Неверный результат критерия');
       ids.add(r.criterion_id);
+      if (!r.evidence_message_nos.length && !r.checked_range)
+        throw fail('Нужны реплики-доказательства или проверенный участок');
+      if (r.missed_action === true && !r.checked_range)
+        throw fail('Для пропущенного действия нужен checked_range');
+      if (r.checked_range != null) {
+        const { from, to } = r.checked_range;
+        if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to > conversation.transcript.length)
+          throw fail('Неверный проверенный диапазон реплик');
+      }
+      if (r.evidence_quotes != null) {
+        const normalize = s => s.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!Array.isArray(r.evidence_quotes) || r.evidence_quotes.some(q => !q || !text(q.quote)
+          || !r.evidence_message_nos.includes(q.message_no)
+          || !normalize(conversation.transcript[q.message_no - 1]?.text ?? '').includes(normalize(q.quote))))
+          throw fail('Цитата не найдена в указанной реплике');
+      }
     }
     validateAnswers(version, results);
 }

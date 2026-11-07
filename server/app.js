@@ -1,4 +1,5 @@
 import express from 'express';
+import { buildSubmission } from './submission.js';
 import { fileURLToPath } from 'node:url';
 import { validateResults } from './validate-results.js';
 import { installJobs } from './jobs.js';
@@ -21,6 +22,10 @@ export function createApp(store, organizer = {}, ai = {}) {
     if (!row) throw fail('Запись не найдена', 404);
     return row;
   };
+  app.post('/api/exports/submission', (req, res) => {
+    const payload = buildSubmission(store, req.body);
+    res.type('application/json').attachment('results.json').send(JSON.stringify(payload, null, 2));
+  });
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   installChecklists(app, store, get);
   installJobs(app, store, get, ai);

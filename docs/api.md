@@ -1,5 +1,11 @@
 # API для команды
 
+## Транскрипты и доказательства
+
+В интерфейсе можно выбрать JSON-файл до 5 МБ и импортировать массив диалогов, объект с records, исходный ответ организаторов data.records или один диалог. Используется указанная группа. Файл должен содержать conversation_id, channel, language и transcript в формате организаторов.
+
+Результат критерия дополнительно поддерживает checked_range: {from,to} (номера с 1, включительно) и evidence_quotes: [{message_no,quote}]. Диапазон проверяется по длине транскрипта, цитаты — по нормализованному вхождению в указанную реплику. Эти поля пока необязательны для совместимости; модуль ИИ должен возвращать checked_range при пропущенном действии. Интерфейс подсвечивает участок по кнопке. Для звонков добавлен HTML-аудиоплеер и сохранена ссылка на исходную запись.
+
 ## Пакетная оценка и кэш
 
 POST /api/evaluation-batches: `{ "group_id": "DEV", "checklist_version": "UUID версии" }`. Набор предварительно загружается через импорт. Ответ 202 и объект пакета. GET /api/evaluation-batches/:id возвращает jobs, total, completed, failed, processed, progress (проценты). Статусы пакета: queued, running, completed, completed_with_errors. GET /api/evaluation-batches — список пакетов. Сбой одного задания не останавливает остальные. Повторный запрос во время обработки использует уже активные задания; может создать дополнительную карточку пакета.
@@ -51,7 +57,7 @@ POST /api/evaluations, GET /api/evaluations и GET /api/evaluations/:id возв
 - POST /api/checklists — создать чек-лист и первую версию.
 - POST /api/checklists/:id/versions — сохранить новую версию.
 
-Для создания отправьте name и criteria. Проще получить latest_version, изменить нужные поля и отправить её целиком. Поля id, version, created_at сервер назначает сам. Критериев ровно восемь, criterion_id уникальны, сумма весов 100. Поля критерия: criterion_id, text, section, weight, answer_type (boolean/scale), allow_na, na_rule, is_gross_error, scale (массив {value, description}). Для грубой ошибки вес 0 и N/A запрещён. Округление — два знака.
+Для создания отправьте name и criteria. Проще получить latest_version, изменить нужные поля и отправить её целиком. Поля id, version, created_at сервер назначает сам. Начально восемь критериев; допускается от 1 до 50, criterion_id уникальны, сумма весов 100. Поля критерия: criterion_id, text, section, weight, answer_type (boolean/scale), allow_na, na_rule, is_gross_error, scale (массив {value, description}). Для грубой ошибки вес 0 и N/A запрещён. Округление — два знака.
 
 Версии неизменяемы. В POST /api/evaluations поле checklist_version теперь обязательно содержит UUID существующей версии, полученный из API, а не строку v1. Передавайте все восемь ответов. Сервер проверяет тип ответа, ступень шкалы и разрешение N/A. Эти же проверки действуют при решении по апелляции.
 400 — неверные данные, 404 — запись не найдена, 409 — повторная апелляция или решение.
@@ -103,3 +109,18 @@ POST /api/evaluations:
 
 Одна апелляция допускает одно решение. После закрытия можно создать новую апелляцию.
 При новой апелляции исходная оценка доступна в results, текущая — в final_results.
+
+## Официальный экспорт JSON 1.0
+
+POST /api/exports/submission с {dataset:"dev"|"prod",group_id,checklist_version,model,mode:"external_api"|"local"|"hybrid",team_name:"Tumo"} скачивает results.json.
+
+Экспорт использует исходные ответы ИИ подтверждённых завершённых заданий (до апелляций), выбранную версию и фактическую модель из оценки. Последнее задание определяет статус, ошибки не скрываются. Ручные и демо-оценки не включаются как успешные. Все 65/10 ID должны присутствовать, повторы и неподходящие каналы запрещены. Для официального экспорта пока поддерживается исходная конфигурация восьми критериев; изменённая рубрика требует согласованного mapping и отклоняется. mode задаётся оператором: backend не может автоматически определить локальность произвольного endpoint.
+
+Из корня репозитория при запущенном сервере:
+
+```powershell
+node scripts/export-submission.js --dataset dev --group DEV --version UUID --model stealth/crouton-alpha
+node scripts/export-submission.js --dataset prod --group GROUP_FROM_ORGANIZERS --version UUID --model stealth/crouton-alpha
+```
+
+Файлы сохраняются в results/dev/results.json и results/prod/results.json. Команда показывает число ok/error. Создание файлов не выполняет commit/push. Не выдавайте файл из одних ошибок за успешную оценку. Скрипт не вызывает модель и не передаёт транскрипты наружу.

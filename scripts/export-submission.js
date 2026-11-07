@@ -1,0 +1,12 @@
+import { parseArgs } from 'node:util';
+import { mkdir, writeFile, rename } from 'node:fs/promises';
+import { resolve } from 'node:path';
+const {values}=parseArgs({options:{dataset:{type:'string'},group:{type:'string'},version:{type:'string'},model:{type:'string'},mode:{type:'string',default:'external_api'},api:{type:'string',default:'http://127.0.0.1:3000'}}});
+if (!['dev','prod'].includes(values.dataset)) throw new Error('--dataset dev или prod обязателен');
+const response=await fetch(new URL('/api/exports/submission',values.api),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataset:values.dataset,group_id:values.group,checklist_version:values.version,model:values.model,mode:values.mode,team_name:'Tumo'})});
+const data=await response.json();
+if (!response.ok) throw new Error(data.error || 'Экспорт не выполнен');
+const dir=resolve('results',values.dataset);await mkdir(dir,{recursive:true});
+await writeFile(resolve(dir,'results.json.tmp'),JSON.stringify(data,null,2)+'\n','utf8');
+await rename(resolve(dir,'results.json.tmp'),resolve(dir,'results.json'));
+console.log(JSON.stringify({file:'results/'+values.dataset+'/results.json',records:data.results.length,ok:data.results.filter(r=>r.status==='ok').length,errors:data.results.filter(r=>r.status==='error').length}));

@@ -5,17 +5,20 @@ window.CqaService = (() => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    const data = await response.json();
+    let data;
+    try { data = await response.json(); } catch { throw new Error("Сервер вернул неожиданный ответ. Проверьте, что сервер запущен и обновлён."); }
     if (!response.ok) throw new Error(data.error || "Ошибка API");
     return data;
   }
 
   return {
     conversations: () => request("conversations"),
+    importJson: body => request('import', body),
     conversation: id => request("conversations/" + id),
     importGroup: group_id => request("import/organizer", { group_id }),
     importDemo: () => request("import", { group_id: "DEMO", records: window.CqaMock.records }),
     checklists: () => request("checklists"),
+    createChecklist: body => request('checklists', body),
     versions: id => request("checklists/" + id + "/versions"),
     saveVersion: (id, config) => request("checklists/" + id + "/versions", config),
     evaluate: body => request("evaluations", body),
