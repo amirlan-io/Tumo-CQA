@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Freedom Broker · CQA</title>
+  <title>Freedom Bank · CQA</title>
   <link rel="stylesheet" href="./styles/cqa.css">
   <script defer src="./scripts/mock-data.js"></script>
   <script defer src="./scripts/service.js"></script>
@@ -11,14 +11,24 @@
 </head>
 <body>
   <main id="cqa-app">
-    <header><p>Freedom Broker · CQA</p><h1>Оценка диалогов</h1></header>
-    <nav aria-label="Разделы">
-      <button type="button" data-page="dialogs">Диалоги</button>
-      <button type="button" data-page="checklists">Чек-листы</button>
-      <button type="button" data-page="appeals">Апелляции</button>
-    </nav>
-    <p id="cqa-status" role="status"></p>
-    <div id="cqa-content"></div>
+    <aside class="cqa-sidebar">
+      <div class="cqa-brand"><span aria-hidden="true">F</span><div><strong>Freedom Bank</strong><small>Conversation Quality Analytics</small></div></div>
+      <p class="cqa-nav-label">РАБОЧАЯ ОБЛАСТЬ</p>
+      <nav aria-label="Разделы">
+        <button type="button" data-page="dialogs" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Диалоги</button>
+        <button type="button" data-page="checklists"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 2 2 4-4m2 3h8M4 15l2 2 4-4m2 3h8"/></svg>Чек-листы</button>
+        <button type="button" data-page="appeals"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 9h8m-8 5h5"/></svg>Апелляции</button>
+      </nav>
+    </aside>
+    <div class="cqa-main">
+      <header class="cqa-page-header">
+        <p class="cqa-eyebrow">КОНТРОЛЬ КАЧЕСТВА</p>
+        <h1 id="cqa-page-title">Диалоги</h1>
+        <p id="cqa-page-description">Загружай диалоги, проверяй оценки и переходи к репликам с доказательствами.</p>
+      </header>
+      <p id="cqa-status" role="status"></p>
+      <div id="cqa-content"></div>
+    </div>
   </main>
 </body>
 </html>

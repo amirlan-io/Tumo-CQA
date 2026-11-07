@@ -3,7 +3,11 @@
   const root = document.querySelector("#cqa-app");
   const content = root.querySelector("#cqa-content");
   const status = root.querySelector("#cqa-status");
-  const pages = { dialogs, checklists, appeals };
+  const pages = {
+    dialogs: ["Диалоги", "Загружай диалоги, проверяй оценки и переходи к репликам с доказательствами.", dialogs],
+    checklists: ["Чек-листы", "Настраивай критерии, веса и шкалы. Сохраняй изменения отдельной версией.", checklists],
+    appeals: ["Апелляции", "Проверяй спорные ответы, доказательства и историю пересмотра.", appeals]
+  };
 
   function add(parent, tag, text = "") {
     const element = document.createElement(tag);
@@ -46,7 +50,14 @@
   function navigate(page) {
     const view = document.createElement("div");
     content.replaceChildren(view);
-    return pages[page](view);
+    const [title, description, render] = pages[page];
+    root.querySelector("#cqa-page-title").textContent = title;
+    root.querySelector("#cqa-page-description").textContent = description;
+    root.querySelectorAll("[data-page]").forEach(control => {
+      if (control.dataset.page === page) control.setAttribute("aria-current", "page");
+      else control.removeAttribute("aria-current");
+    });
+    return render(view);
   }
 
   root.querySelectorAll("[data-page]").forEach(control => {
@@ -117,7 +128,10 @@
   }
 
   async function dialogs(view) {
-    const group = field(view, "Группа", "input", "DEV");
+    const toolbar = add(view, "section");
+    toolbar.className = "cqa-toolbar";
+    add(toolbar, "h2", "Загрузка диалогов");
+    const group = field(toolbar, "Идентификатор группы", "input", "DEV");
     const list = add(view, "div");
     const details = add(view, "div");
     async function refresh(groupId) {
@@ -129,15 +143,15 @@
       visible.forEach(record => button(list, "Открыть " + record.conversation_id + " · " + record.language,
         () => openDialog(details, record.id)));
     }
-    button(view, "Загрузить группу", async () => {
+    button(toolbar, "Загрузить группу", async () => {
       const id = group.value.trim();
       await api.importGroup(id);
       await refresh(id);
     });
-    button(view, "Загрузить вымышленный диалог", async () => {
+    button(toolbar, "Загрузить вымышленный диалог", async () => {
       await api.importDemo();
       await refresh("DEMO");
-    });
+    }).classList.add("cqa-secondary");
     await refresh();
   }
 

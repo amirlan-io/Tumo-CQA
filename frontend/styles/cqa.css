@@ -53,3 +53,57 @@
 #cqa-app fieldset { min-width: 0; margin: .75rem 0; border: 1px solid #c9d9cd; }
 #cqa-app legend { max-width: 100%; }
 #cqa-app #cqa-content > div > section { margin-top: 1rem; }
+
+#cqa-app:has(.cqa-sidebar) {
+  --cqa-ink: #172a21;
+  --cqa-muted: #4d6559;
+  --cqa-green: #087447;
+  --cqa-border: #d8e5dc;
+  max-width: 90rem;
+  padding: 0;
+  border: 1px solid var(--cqa-border);
+  border-radius: 1rem;
+  background: #f5f8f5;
+  color: var(--cqa-ink);
+  display: grid;
+}
+#cqa-app .cqa-sidebar { background: #0e3527; color: #fff; padding: 1.25rem; border-radius: .9rem .9rem 0 0; }
+#cqa-app .cqa-brand { display: flex; align-items: center; gap: .65rem; }
+#cqa-app .cqa-brand span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.35rem;
+  height: 2.35rem;
+  border-radius: .65rem;
+  background: #a5ef72;
+  color: #123c2b;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+#cqa-app .cqa-brand small { display: block; color: #c5decf; }
+#cqa-app .cqa-nav-label { color: #b5d1c2; margin: 1.65rem 0 .45rem; font-size: .7rem; letter-spacing: .12em; font-weight: 700; }
+#cqa-app .cqa-sidebar nav { display: flex; flex-wrap: wrap; gap: .25rem; }
+#cqa-app .cqa-sidebar button { display: flex; align-items: center; gap: .65rem; margin: 0; background: transparent; color: #e8f4eb; text-align: left; }
+#cqa-app .cqa-sidebar button:hover { background: #245440; }
+#cqa-app .cqa-sidebar button[aria-current] { background: #c8f5a9; color: #183a25; font-weight: 700; }
+#cqa-app .cqa-sidebar button:focus-visible { outline-color: #fff; }
+#cqa-app .cqa-sidebar svg { flex: 0 0 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#cqa-app .cqa-main { min-width: 0; padding: clamp(.85rem, 3vw, 2rem); }
+#cqa-app .cqa-page-header { border-bottom: 1px solid var(--cqa-border); padding-bottom: 1rem; }
+#cqa-app .cqa-page-header h1 { margin: .2rem 0; font-size: clamp(1.7rem, 4vw, 2.55rem); }
+#cqa-app .cqa-page-header p { margin: .4rem 0; color: var(--cqa-muted); }
+#cqa-app .cqa-page-header .cqa-eyebrow { color: var(--cqa-green); font-size: .73rem; letter-spacing: .13em; }
+#cqa-app .cqa-main button { background: var(--cqa-green); }
+#cqa-app .cqa-main button:hover:not(:disabled) { background: #065939; }
+#cqa-app .cqa-main .cqa-secondary { background: #edf7ee; color: #185b3a; border: 1px solid #c0dbc9; }
+#cqa-app .cqa-main .cqa-secondary:hover:not(:disabled) { background: #dcefe0; }
+#cqa-app .cqa-toolbar { margin-bottom: .85rem; }
+#cqa-app .cqa-toolbar h2, #cqa-app .cqa-main section > h2:first-child { margin-top: 0; }
+#cqa-app .cqa-toolbar label { max-width: 18rem; }
+#cqa-app .cqa-main li { border: 1px solid var(--cqa-border); margin-bottom: .4rem; }
+#cqa-app .cqa-main section section { margin-top: .85rem; }
+@media (min-width: 48rem) {
+  #cqa-app:has(.cqa-sidebar) { grid-template-columns: 14rem minmax(0, 1fr); min-height: min(46rem, 92vh); }
+  #cqa-app .cqa-sidebar { border-radius: .9rem 0 0 .9rem; }
+  #cqa-app .cqa-sidebar nav { display: grid; }
+}
