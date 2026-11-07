@@ -83,6 +83,7 @@
     const rows = new Map();
     record.transcript.forEach(turn => {
       const row = add(list, "li");
+      row.dataset.speaker = turn.speaker;
       row.tabIndex = -1;
       add(row, "strong", turn.timestamp + " · " + turn.speaker);
       add(row, "p", turn.text);
@@ -144,16 +145,29 @@
     toolbar.className = "cqa-toolbar";
     add(toolbar, "h2", "Загрузка диалогов");
     const group = field(toolbar, "Идентификатор группы", "input", "DEV");
+    const summary = add(view, "div");
+    summary.className = "cqa-summary";
     const list = add(view, "div");
+    list.className = "cqa-dialog-list";
     const details = add(view, "div");
     async function refresh(groupId) {
       const records = await api.conversations();
       list.replaceChildren();
       details.replaceChildren();
       const visible = records.filter(record => !groupId || record.group_id === groupId);
-      if (!visible.length) add(list, "p", "Диалогов пока нет.");
-      visible.forEach(record => button(list, "Открыть " + record.conversation_id + " · " + record.language,
-        () => openDialog(details, record.id)));
+      summary.replaceChildren();
+      [['Все диалоги', visible.length], ['Чаты', visible.filter(c => c.channel === 'agent chat').length], ['Звонки', visible.filter(c => c.channel === 'voice call').length]].forEach(([label, count]) => {
+        const card = add(summary, 'div'); add(card, 'span', label); add(card, 'strong', String(count));
+      });
+      add(list, 'h2', 'Диалоги · ' + visible.length);
+      if (!visible.length) add(list, "p", "Загрузите группу, чтобы начать оценку качества.");
+      visible.forEach(record => {
+        const row = add(list, 'div'); row.className = 'cqa-dialog-row';
+        const identity = add(row, 'div'); add(identity, 'strong', record.conversation_id);
+        add(identity, 'small', record.group_id + ' · ' + (record.channel === 'voice call' ? 'Звонок' : 'Чат'));
+        const language = add(row, 'span', record.language); language.className = 'cqa-badge';
+        button(row, "Открыть " + record.conversation_id + " · " + record.language, () => openDialog(details, record.id)).className = 'cqa-secondary';
+      });
     }
     button(toolbar, "Загрузить группу", async () => {
       const id = group.value.trim();
