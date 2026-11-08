@@ -373,7 +373,7 @@
         add(output, "p", "✓ Сервер проверил формат ответа ИИ и ссылки на реплики. Баллы рассчитаны по весам чек-листа.").className = "cqa-verification";
       }
       add(output, "p", "Исходный итог · " + total(evaluation.original_score));
-      evaluation.decisions.forEach(d => add(output, 'p', 'Решение проверяющего · ' + d.criterion_id + ' · ' + (d.action === 'change' ? 'Изменено' : 'Подтверждено') + ' · ' + d.reason));
+      evaluation.decisions.forEach(d => add(output, 'p', 'Решение проверяющего · ' + (version.criteria.find(c => c.criterion_id === d.criterion_id)?.text || 'Критерий') + ' · ' + (d.action === 'change' ? 'Изменено' : 'Подтверждено') + ' · ' + d.reason));
       add(output, "p", "Грубые ошибки · " + (evaluation.final_score.gross_error ? "Да" : "Нет"));
       evaluation.final_score.sections.forEach(section =>
         add(output, "p", section.section + " · " + (section.points ?? "—") + " / " + (section.maximum ?? "—")));
