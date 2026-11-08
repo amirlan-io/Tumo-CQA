@@ -5,8 +5,8 @@ import { validateResults } from './validate-results.js';
 import { installJobs } from './jobs.js';
 import { importRecords } from './import.js';
 import { fetchDataset } from './organizer.js';
-import { installChecklists, validateAnswers } from './checklists.js';
-import { evaluationView, applyDecisions } from './score.js';
+import { installChecklists, validateAnswers, validateConfig } from './checklists.js';
+import { evaluationView, applyDecisions, calculateScore } from './score.js';
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const text = value => typeof value === 'string' && value.trim().length > 0;
@@ -22,6 +22,57 @@ export function createApp(store, organizer = {}, ai = {}) {
     if (!row) throw fail('Запись не найдена', 404);
     return row;
   };
+  app.get('/api/conversations/:id/audio', async (req, res) => {
+    const { audio_url } = get('conversation', req.params.id);
+    if (!audio_url) throw fail('Запись недоступна.', 404);
+    const source = new URL(audio_url);
+    if (source.protocol !== 'https:' ||
+        source.hostname !== 'ec88f21f1accecf38e20095a9fe175.a5.environment.api.powerplatform.com')
+      throw fail('Источник записи не поддерживается.', 404);
+    let target;
+    try {
+      const page = await fetch(source, { redirect: 'error', signal: AbortSignal.timeout(8000) });
+      if (!page.ok || !page.headers.get('content-type')?.startsWith('text/html')) throw new Error();
+      const html = await page.text();
+      const link = html.match(/<source\s+src="([^"]+)"/i)?.[1];
+      if (!link) throw new Error();
+      target = new URL(link.replaceAll('&amp;', '&'), source);
+      if (target.protocol !== 'https:' || target.hostname !== 'freedomholdingcorporation.crm11.dynamics.com' ||
+          target.username || target.password) throw new Error();
+    } catch {
+      throw fail('Не удалось получить аудиозапись. Откройте ссылку на запись звонка.', 502);
+    }
+    res.set('Cache-Control', 'private, no-store').redirect(307, target.href);
+  });
+  app.post('/api/checklist-versions/:id/preview-weights', (req, res) => {
+    const version = get('checklist_version', req.params.id);
+    const { group_id, criteria } = req.body ?? {};
+    if (!text(group_id)) throw fail('Укажите группу диалогов.');
+    const draft = validateConfig({ name: version.name, criteria });
+    const proposed = new Map(draft.criteria.map(criterion => [criterion.criterion_id, criterion]));
+    const withoutWeight = ({ weight, ...rule }) => JSON.stringify(rule);
+    if (proposed.size !== version.criteria.length || version.criteria.some(criterion => {
+      const candidate = proposed.get(criterion.criterion_id);
+      return !candidate || withoutWeight(candidate) !== withoutWeight(criterion);
+    })) throw fail('Для предпросмотра меняйте только веса. Новые правила требуют новой оценки.');
+
+    const ids = new Set(store.list('conversation').filter(c => c.group_id === group_id.trim()).map(c => c.id));
+    const latest = new Map();
+    for (const evaluation of store.list('evaluation')) {
+      if (evaluation.model && evaluation.checklist_version === version.id && ids.has(evaluation.conversation_id))
+        latest.set(evaluation.conversation_id, evaluation);
+    }
+    if (!latest.size) throw fail('В группе нет оценок ИИ по выбранной версии.', 404);
+    const pairs = [...latest.values()].map(evaluation => ({
+      before: calculateScore(version, evaluation.results).total,
+      after: calculateScore(draft, evaluation.results).total
+    })).filter(pair => pair.before !== null && pair.after !== null);
+    if (!pairs.length) throw fail('Нет диалогов с итоговым баллом при обоих наборах весов.');
+    const average = key => Number((pairs.reduce((sum, pair) => sum + pair[key], 0) / pairs.length).toFixed(2));
+    res.json({ compared: pairs.length, group_total: ids.size, before: average('before'), after: average('after'),
+      increased: pairs.filter(pair => pair.after > pair.before).length,
+      decreased: pairs.filter(pair => pair.after < pair.before).length });
+  });
   app.post('/api/exports/submission', (req, res) => {
     const payload = buildSubmission(store, req.body);
     res.type('application/json').attachment('results.json').send(JSON.stringify(payload, null, 2));

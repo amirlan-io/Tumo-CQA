@@ -124,3 +124,5 @@ node scripts/export-submission.js --dataset prod --group GROUP_FROM_ORGANIZERS -
 ```
 
 Файлы сохраняются в results/dev/results.json и results/prod/results.json. Команда показывает число ok/error. Создание файлов не выполняет commit/push. Не выдавайте файл из одних ошибок за успешную оценку. Скрипт не вызывает модель и не передаёт транскрипты наружу.
+
+Повтор неудачных заданий: `POST /api/evaluation-batches/:id/retry` с `{}`. Ответ 202 содержит новый пакет только из failed-заданий и `retry_of`. Успешные задания исходного пакета не изменяются; если ошибок нет, возвращается 409.

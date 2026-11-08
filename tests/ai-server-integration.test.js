@@ -52,4 +52,3 @@ test('teammate evaluator integrates with server jobs scoring diagnostics and per
     await rm(diagnosticDir, { recursive: true, force: true });
   }
 });
-

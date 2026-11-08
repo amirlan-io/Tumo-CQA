@@ -1,6 +1,21 @@
 import { createHash } from 'node:crypto';
 import { validateResults } from './validate-results.js';
 
+function jobErrorMessage(error) {
+  if (error?.timeout) return 'Превышено время ожидания ИИ. Повторите запуск.';
+  if (error?.code === 'AI_UNAVAILABLE' && error.providerStatus === 429)
+    return 'Провайдер ИИ ограничил число запросов. Повторите запуск позже.';
+  if (error?.code === 'AI_UNAVAILABLE' && [401, 403].includes(error.providerStatus))
+    return 'Провайдер ИИ отклонил доступ. Проверьте ключ и права на модель.';
+  switch (error?.code) {
+    case 'AI_CONFIG': return 'Проверьте настройки подключения ИИ.';
+    case 'AI_UNAVAILABLE': return 'Провайдер ИИ недоступен. Повторите запуск позже.';
+    case 'AI_INVALID_RESPONSE': return 'Ответ модели не прошёл проверку. Повторите оценку.';
+    case 'AI_REFUSED': return 'Модель отказалась оценивать диалог.';
+    default: return 'Не удалось получить корректную оценку ИИ. Повторите запуск.';
+  }
+}
+
 export function installJobs(app, store, get, { evaluateDialogue, model, prompt_version, timeoutMs = 60000 } = {}) {
   // Interrupted calls cannot be resumed safely: preserve them as visible errors.
   for (const job of store.list('job')) if (['queued', 'running'].includes(job.status))
@@ -39,8 +54,7 @@ export function installJobs(app, store, get, { evaluateDialogue, model, prompt_v
         store.update('job', id, { status: 'completed', cache_hit: Boolean(cached), evaluation_id: evaluation.id, finished_at: new Date().toISOString() });
       });
     } catch (error) {
-      store.update('job', id, { status: 'failed', error: error.timeout
-        ? 'Превышено время ожидания ИИ' : 'Не удалось получить корректную оценку ИИ. Повторите запуск.',
+      store.update('job', id, { status: 'failed', error: jobErrorMessage(error),
         finished_at: new Date().toISOString() });
     } finally { clearTimeout(timer); }
   }
@@ -84,6 +98,16 @@ export function installJobs(app, store, get, { evaluateDialogue, model, prompt_v
   });
   app.get('/api/evaluation-batches', (req, res) => res.json(store.list('batch').map(batchView)));
   app.get('/api/evaluation-batches/:id', (req, res) => res.json(batchView(get('batch', req.params.id))));
+  app.post('/api/evaluation-batches/:id/retry', (req, res) => {
+    const previous = get('batch', req.params.id);
+    if (typeof evaluateDialogue !== 'function') return res.status(503).json({ error: 'Модуль ИИ ещё не подключён' });
+    const failed = previous.job_ids.map(id => get('job', id)).filter(j => j.status === 'failed');
+    if (!failed.length) return res.status(409).json({ error: 'В пакете нет ошибок для повторной оценки' });
+    const batch = store.transaction(() => store.add('batch', { group_id: previous.group_id,
+      checklist_version: previous.checklist_version, retry_of: previous.id,
+      job_ids: failed.map(j => enqueue(j.conversation_id, j.checklist_version).id) }));
+    res.status(202).json(batchView(batch));
+  });
   app.get('/api/evaluation-jobs', (req, res) => res.json(store.list('job')));
   app.get('/api/evaluation-jobs/:id', (req, res) => res.json(get('job', req.params.id)));
 }

@@ -66,6 +66,7 @@ test('frontend served by backend launches real jobs and batches through service 
     answer.value = 'yes';
     find('Изменить ответ').click();
     await until(() => doc.body.textContent.includes('Текущий итог · 10.00'));
+    assert.ok(find('Апелляция 1 · закрыта'));
     assert.equal(store.list('decision').length, 1);
     assert.equal(dom.window.location.hash, '#appeals');
     find('Чек-листы').click();

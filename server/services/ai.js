@@ -117,7 +117,7 @@ export function createEvaluator(options = {}) {
       }
       if (!response.ok) {
         await record(attempt, { status: 'http_error', http_status: response.status, raw_response: raw });
-        throw fail('AI_UNAVAILABLE', `Модель недоступна (HTTP ${response.status}). Проверьте ключ, лимиты и доступ к модели.`, 503);
+        throw Object.assign(fail('AI_UNAVAILABLE', `Модель недоступна (HTTP ${response.status}). Проверьте ключ, лимиты и доступ к модели.`, 503), { providerStatus: response.status });
       }
       let envelope, content, errors = [];
       try { envelope = JSON.parse(raw); } catch { errors.push('API вернул невалидный JSON-конверт.'); }

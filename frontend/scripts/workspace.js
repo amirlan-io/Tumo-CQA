@@ -53,6 +53,7 @@
     if (!pages[page]) page = "dialogs";
     if (location.hash !== "#" + page) history.pushState(null, "", "#" + page);
     const view = document.createElement("div");
+    stopAudio(content);
     content.replaceChildren(view);
     const [title, description, render] = pages[page];
     root.querySelector("#cqa-page-title").textContent = title;
@@ -68,7 +69,53 @@
     control.addEventListener("click", () => run(() => navigate(control.dataset.page), control));
   });
 
+  const audioTargets = new WeakMap();
+  const excerpts = new WeakMap();
+
+  function stopAudio(container, except) {
+    container.querySelectorAll('audio').forEach(player => {
+      excerpts.get(player)?.();
+      if (player !== except) player.pause();
+    });
+  }
+
+  window.addEventListener('pagehide', () => stopAudio(root));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopAudio(root); });
+
+  function timestampMillis(value) {
+    const relative = /^(?:(\d+):)?(\d{1,2}):(\d{2}(?:\.\d+)?)$/.exec(value);
+    if (relative) return ((Number(relative[1] || 0) * 60 + Number(relative[2])) * 60 + Number(relative[3])) * 1000;
+    return Date.parse(value);
+  }
+
+  function playEvidence(parts) {
+    const { player } = parts[0];
+    stopAudio(root, player);
+    let index = 0;
+    const clear = () => {
+      player.removeEventListener('timeupdate', advance);
+      player.removeEventListener('pause', clear);
+      player.removeEventListener('ended', clear);
+      excerpts.delete(player);
+    };
+    const advance = () => {
+      if (index >= parts.length) return;
+      if (player.seeking || player.currentTime < parts[index].end) return;
+      index++;
+      if (index < parts.length) player.currentTime = parts[index].offset;
+      else { clear(); player.pause(); }
+    };
+    excerpts.set(player, clear);
+    player.addEventListener('timeupdate', advance);
+    player.addEventListener('pause', clear);
+    player.addEventListener('ended', clear);
+    player.currentTime = parts[0].offset;
+    player.play().catch(clear);
+  }
+
   function transcript(parent, record) {
+    let player;
+    const start = timestampMillis(record.transcript[0]?.timestamp);
     add(parent, "h2", "Транскрипт · " + record.conversation_id);
     add(parent, "p", [record.channel, record.language, record.group_id].join(" · "));
     if (record.channel === "voice call") {
@@ -78,11 +125,19 @@
         link.href = audio;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        const player = add(parent, 'audio');
+        player = add(parent, 'audio');
         player.controls = true;
         player.preload = 'none';
-        player.src = audio;
+        const host = new URL(audio).hostname;
+        player.src = host === 'ec88f21f1accecf38e20095a9fe175.a5.environment.api.powerplatform.com'
+          ? '../api/conversations/' + encodeURIComponent(record.id) + '/audio' : audio;
+        const playbackError = add(parent, 'p');
+        playbackError.setAttribute('role', 'status');
+        player.addEventListener('error', () => {
+          playbackError.textContent = 'Встроенный плеер не загрузил запись. Воспользуйтесь ссылкой выше.';
+        });
         player.setAttribute('aria-label', 'Запись звонка');
+        add(parent, 'p', 'Доказательство воспроизводится до следующей метки времени и останавливается. Позиция приблизительная: паузы записи могут смещать звук относительно транскрипта.');
       } else {
         add(parent, "p", "Запись недоступна.");
       }
@@ -90,25 +145,33 @@
 
     const list = add(parent, "ol");
     const rows = new Map();
-    record.transcript.forEach(turn => {
+    record.transcript.forEach((turn, index) => {
       const row = add(list, "li");
       row.dataset.speaker = turn.speaker;
       row.tabIndex = -1;
       add(row, "strong", turn.timestamp + " · " + turn.speaker);
       add(row, "p", turn.text);
       rows.set(turn.message_no, row);
+      const offset = (timestampMillis(turn.timestamp) - start) / 1000;
+      if (player && Number.isFinite(offset) && offset >= 0) {
+        const next = (timestampMillis(record.transcript[index + 1]?.timestamp) - start) / 1000;
+        audioTargets.set(row, { player, offset, end: next > offset ? next : offset + 5 });
+      }
     });
     return rows;
   }
 
-  function evidence(parent, numbers, rows) {
+  function evidence(parent, numbers, rows, label = "Доказательство · " + numbers.join(", ")) {
     if (!numbers.length) return;
-    button(parent, "Доказательство · " + numbers.join(", "), () => {
+    button(parent, label, () => {
       rows.forEach(row => row.classList.remove("cqa-evidence"));
       const matches = numbers.map(number => rows.get(number)).filter(Boolean);
       matches.forEach(row => row.classList.add("cqa-evidence"));
       matches[0]?.focus({ preventScroll: true });
       matches[0]?.scrollIntoView({ block: "center" });
+      const parts = [...new Set(matches)].map(row => audioTargets.get(row))
+        .filter(Boolean).sort((a, b) => a.offset - b.offset);
+      if (parts.length) playEvidence(parts);
     });
   }
 
@@ -166,6 +229,7 @@
       if (file.size > 5 * 1024 * 1024) throw new Error('Файл должен быть не больше 5 МБ');
       let data;
       try { data = JSON.parse(await file.text()); } catch { throw new Error('Файл не содержит корректный JSON'); }
+      if (!data || typeof data !== 'object') throw new Error('JSON должен содержать массив диалогов или объект records');
       const records = Array.isArray(data) ? data : data.records ?? data.data?.records ?? [data];
       const groupId = group.value.trim() || 'UPLOAD';
       await api.importJson({ group_id: groupId, records });
@@ -178,7 +242,8 @@
     const details = add(view, "dialog");
     details.className = 'cqa-dialog-modal';
     details.setAttribute('aria-label', 'Диалог и оценка');
-    const closeDetails = () => { details.close(); };
+    const closeDetails = () => { stopAudio(details); details.close(); };
+    details.addEventListener("close", () => stopAudio(details));
     details.addEventListener('click', event => { if (event.target === details) {
       const bounds = details.getBoundingClientRect();
       if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeDetails();
@@ -186,6 +251,7 @@
     async function refresh(groupId) {
       const records = await api.conversations();
       list.replaceChildren();
+      stopAudio(details);
       details.replaceChildren();
       const visible = records.filter(record => !groupId || record.group_id === groupId);
       summary.replaceChildren();
@@ -214,13 +280,18 @@
     const batchVersions = field(evaluatePanel, 'Чек-лист для оценки группы', 'select');
     (await api.checklists()).forEach(c => option(batchVersions, c.latest_version.id, c.latest_version.name + ' · v' + c.latest_version.version));
     const batchStatus = add(toolbar, 'div');
+    const conversationNames = new Map((await api.conversations()).map(c => [c.id, c.conversation_id]));
     async function monitorBatch(id) {
       await watch(() => api.batch(id), batch => {
         batchStatus.replaceChildren();
         add(batchStatus, 'p', jobLabels[batch.status] + ' · ' + batch.progress + '% · готово ' + batch.completed + '/' + batch.total + ' · ошибок ' + batch.failed);
         batch.jobs.forEach(job => {
-          add(batchStatus, 'p', jobLabels[job.status] + (job.cache_hit ? ' · из кэша' : '') + (job.error ? ' · ' + job.error : ''));
-          if (job.evaluation_id) button(batchStatus, 'Открыть результат', () => openDialog(details, job.conversation_id));
+          add(batchStatus, 'p', (conversationNames.get(job.conversation_id) || job.conversation_id) + ' · ' + jobLabels[job.status] + (job.cache_hit ? ' · из кэша' : '') + (job.error ? ' · ' + job.error : ''));
+          if (job.evaluation_id) button(batchStatus, 'Открыть результат', () => openDialog(details, job.conversation_id, job.evaluation_id));
+        });
+        if (batch.failed && batch.processed === batch.total) button(batchStatus, 'Повторить только ошибки', async () => {
+          const retry = await api.retryBatch(batch.id);
+          await monitorBatch(retry.id);
         });
       }, () => view.isConnected);
     }
@@ -233,14 +304,15 @@
     await refresh();
   }
 
-  async function openDialog(details, id) {
+  async function openDialog(details, id, evaluationId) {
     details.dataset.dialogId = id;
     const [record, lists, evaluations] = await Promise.all([api.conversation(id), api.checklists(), api.evaluations()]);
     const versions = (await Promise.all(lists.map(list => api.versions(list.id)))).flat();
     if (!details.isConnected || details.dataset.dialogId !== id) return;
+    stopAudio(details);
     details.replaceChildren();
     details.tabIndex = -1;
-    const close = button(details, 'Закрыть ×', () => details.close());
+    const close = button(details, 'Закрыть ×', () => { stopAudio(details); details.close(); });
     close.className = 'cqa-modal-close';
     const heading = add(details, 'h2', 'Диалог · ' + record.conversation_id);
 
@@ -259,7 +331,12 @@
     function show(evaluation) {
       output.replaceChildren();
       const version = versions.find(item => item.id === evaluation.checklist_version);
+      versionSelect.value = evaluation.checklist_version;
+      add(output, 'p', 'Оценка по чек-листу · ' + version.name + ' · v' + version.version).className = 'cqa-evaluation-version';
       add(output, "h2", "Итог · " + total(evaluation.final_score));
+      if (evaluation.model) {
+        add(output, "p", "✓ Сервер проверил формат ответа ИИ и ссылки на реплики. Баллы рассчитаны по весам чек-листа.").className = "cqa-verification";
+      }
       add(output, "p", "Исходный итог · " + total(evaluation.original_score));
       evaluation.decisions.forEach(d => add(output, 'p', 'Решение проверяющего · ' + d.criterion_id + ' · ' + (d.action === 'change' ? 'Изменено' : 'Подтверждено') + ' · ' + d.reason));
       add(output, "p", "Грубые ошибки · " + (evaluation.final_score.gross_error ? "Да" : "Нет"));
@@ -272,14 +349,39 @@
         const card = add(output, "section");
         add(card, "h3", criterion.text);
         add(card, "p", "Исходный ответ · " + answerText(original) + " · текущий · " + answerText(result));
-        if (!criterion.is_gross_error) add(card, "p", "Вес · " + score.weight + " · баллы · " + (result.answer === "na" ? "—" : score.points ?? "—"));
-        add(card, "p", original.explanation);
+        if (!criterion.is_gross_error) {
+          add(card, "p", "Вес · " + score.weight + " · баллы до N/A · " + (result.answer === "na" ? "—" : score.weighted_points));
+          add(card, 'p', 'Вклад в итог после перераспределения N/A · ' + (result.answer === 'na' ? '—' : score.points ?? '—'));
+        }
+        add(card, "p", 'Обоснование исходной оценки · ' + original.explanation);
         if (result.na_reason) add(card, "p", "Причина N/A · " + result.na_reason);
         evidence(card, original.evidence_message_nos, rows);
         if (original.checked_range) {
           const range = original.checked_range;
-          evidence(card, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i), rows);
-          add(card, 'p', 'Проверенный участок: реплики ' + range.from + '–' + range.to);
+          evidence(card, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i), rows,
+            'Проверенный участок · ' + range.from + '–' + range.to);
+        }
+        const needsCoaching = result.answer !== 'na' && (criterion.is_gross_error ? result.answer === 'yes' :
+          result.answer === 'no' || (result.answer === 'scale' && result.raw_score < Math.max(...criterion.scale.map(s => s.value))));
+        if (needsCoaching) {
+          const coach = add(card, "details");
+          add(coach, "summary", "Как улучшить разговор? · Тренер оператора");
+          add(coach, "p", "Правило · " + criterion.text);
+          add(coach, "p", "Исходное объяснение ИИ · " + original.explanation);
+          if (evaluation.decisions.some(d => d.criterion_id === criterion.criterion_id))
+            add(coach, 'p', 'После пересмотра ориентируйтесь на решение проверяющего выше.');
+          const range = original.checked_range;
+          if (range) evidence(coach, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i),
+            rows, "Проверенный участок · " + range.from + "–" + range.to);
+          else evidence(coach, original.evidence_message_nos, rows);
+          const deadline = /^Срок ответа\./i.test(criterion.text);
+          const phrases = {
+            RU: deadline ? "По вашей заявке ответ поступит до [подтверждённые дата и время]." : "Я уточню информацию по вашему вопросу. [Проверенный ответ или согласованный следующий шаг]. Остались ли у вас вопросы?",
+            KZ: deadline ? "Өтініміңізге жауап [расталған күн мен уақыт] дейін беріледі." : "Сұрағыңыз бойынша ақпаратты нақтылаймын. [Тексерілген жауап немесе келісілген келесі қадам]. Қосымша сұрақтарыңыз бар ма?",
+            EN: deadline ? "You’ll receive an answer to your request by [confirmed date and time]." : "Let me clarify the information about your question. [Verified answer or agreed next step]. Do you have any other questions?"
+          };
+          add(coach, "p", "Учебный пример · " + (phrases[record.language] || phrases.RU));
+          add(coach, 'p', 'Это учебный шаблон, не новый ответ модели. Заполните скобки только проверенными сведениями; не обещайте неподтверждённые сроки и условия.');
         }
         const appealForm = add(card, "details");
         add(appealForm, "summary", "Оспорить оценку");
@@ -350,7 +452,7 @@
     const savedEvaluations = evaluations.filter(item => item.conversation_id === record.id);
     savedEvaluations.forEach((item, index) =>
       button(review, "Открыть оценку " + (index + 1) + " · " + total(item.final_score), () => show(item)));
-    if (savedEvaluations.length) show(savedEvaluations.at(-1));
+    if (savedEvaluations.length) show(savedEvaluations.find(e => e.id === evaluationId) || savedEvaluations.at(-1));
     if (typeof details.showModal === 'function' && !details.open) details.showModal();
     close.focus({ preventScroll: true });
     details.scrollTop = 0;
@@ -385,6 +487,23 @@
       const name = field(panel, "Название чек-листа", "input", list.latest_version.name);
       add(panel, "h2", "Редактирование версии " + list.latest_version.version);
       const readCriteria = [];
+      const sandbox = add(panel, "details");
+      add(sandbox, "summary", "Песочница весов");
+      add(sandbox, "p", "Измените только веса ниже. Предпросмотр использует исходные ответы ИИ по этой версии.");
+      const group = field(sandbox, "Группа диалогов", "input", "DEV");
+      const preview = add(sandbox, "p");
+      preview.setAttribute("role", "status");
+      button(sandbox, "Проверить влияние весов", async () => {
+        preview.textContent = "";
+        const result = await api.previewWeights(list.latest_version.id, {
+          group_id: group.value,
+          criteria: readCriteria.map(read => read())
+        });
+        preview.textContent = "Средний балл · " + result.before.toFixed(2) + " → " + result.after.toFixed(2) +
+          " · Сравнено " + result.compared + " из " + result.group_total +
+          " · Выросли " + result.increased + " · Снизились " + result.decreased;
+      });
+      panel.addEventListener("input", () => { preview.textContent = ""; });
       const meter = add(panel, 'p'); meter.className = 'cqa-weight-meter'; meter.setAttribute('role', 'status');
       const criteriaPanel = add(panel, "div");
       function updateMeter() {
@@ -490,12 +609,17 @@
     if (!entries.length) add(view, "p", "Апелляций пока нет.");
     const list = add(view, "div");
     const details = add(view, "div");
-    entries.forEach((entry, index) => button(list, "Апелляция " + (index + 1) + " · " +
-      (entry.decision ? "закрыта" : "на рассмотрении"), () => openAppeal(details, entry.id)));
+    entries.forEach((entry, index) => {
+      const control = button(list, "Апелляция " + (index + 1) + " · " +
+        (entry.decision ? "закрыта" : "на рассмотрении"), () => openAppeal(details, entry.id, () => {
+          control.textContent = 'Апелляция ' + (index + 1) + ' · закрыта';
+        }));
+    });
   }
 
-  async function openAppeal(view, id) {
+  async function openAppeal(view, id, onDecision) {
     const appeal = await api.appealDetails(id);
+    stopAudio(view);
     view.replaceChildren();
     const grid = add(view, "div");
     grid.className = "cqa-grid";
@@ -522,11 +646,21 @@
     const read = answerFields(panel, appeal.criterion);
     const decide = async (action, replacement) => {
       await api.decide(id, { action, reason: reason.value, replacement });
-      await openAppeal(view, id);
+      onDecision?.();
+      await openAppeal(view, id, onDecision);
     };
     button(panel, "Подтвердить текущий ответ", () => decide("confirm"));
     button(panel, "Изменить ответ", () => decide("change", read()));
   }
+
+  const embed = root.querySelector("#cqa-embed");
+  const setEmbed = enabled => {
+    root.classList.toggle("cqa-crm-embed", enabled);
+    embed.setAttribute("aria-pressed", String(enabled));
+    embed.textContent = enabled ? "Выйти из предпросмотра" : "Предпросмотр виджета Dynamics 365";
+  };
+  setEmbed(new URLSearchParams(location.search).get("embed") === "crm");
+  embed.addEventListener("click", () => setEmbed(!root.classList.contains("cqa-crm-embed")));
 
   window.addEventListener("popstate", () => run(() => navigate(location.hash.slice(1))));
   run(() => navigate(location.hash.slice(1) || "dialogs"));
