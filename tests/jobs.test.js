@@ -58,6 +58,9 @@ test('missing model is explicit 503 and creates no job', async () => {
 test('provider errors, invalid results and timeout never save evaluations', async () => {
   for (const ai of [
     { evaluateDialogue: async () => { throw new Error('secret-key'); } },
+    { evaluateDialogue: async () => {
+      throw Object.assign(new Error('secret-key'), { code: 'AI_UNAVAILABLE', providerStatus: 429 });
+    }, expectedError: /ограничил число запросов/ },
     { evaluateDialogue: async () => ({ model: 'test', prompt_version: 'v1', results: [] }) },
     { evaluateDialogue: () => new Promise(() => {}), timeoutMs: 10 }
   ]) {
@@ -66,6 +69,7 @@ test('provider errors, invalid results and timeout never save evaluations', asyn
       const job = await ctx.request('/evaluation-jobs', ctx.body);
       const failed = await terminal(ctx, job.data.id);
       assert.equal(failed.status, 'failed'); assert.ok(!failed.error.includes('secret'));
+      if (ai.expectedError) assert.match(failed.error, ai.expectedError);
       assert.equal(ctx.store.list('evaluation').length, 0);
     } finally { await ctx.close(); }
   }

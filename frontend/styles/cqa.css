@@ -229,3 +229,7 @@ body:has(.cqa-dialog-modal[open]) { overflow:hidden; }
 #cqa-app .cqa-scale-row label { margin:4px 0; }
 #cqa-app .cqa-scale-row textarea { min-height:90px; }
 #cqa-app .cqa-scale-row button { grid-column:2; justify-self:start; margin:0 0 8px; }
+
+#cqa-app.cqa-crm-embed:has(.cqa-sidebar) { grid-template-columns: minmax(0, 1fr); }
+#cqa-app.cqa-crm-embed .cqa-sidebar { display: none; }
+#cqa-app .cqa-verification { padding: .65rem .85rem; border-radius: .5rem; background: #def5e5; color: #174a31; }
