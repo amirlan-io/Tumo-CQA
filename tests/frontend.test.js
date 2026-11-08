@@ -111,3 +111,37 @@ test('frontend served by backend launches real jobs and batches through service 
   }
 });
 
+
+test('dirty checklist blocks navigation and export downloads server JSON with error count', async () => {
+  const store=createStore(); const server=createApp(store).listen(0,'127.0.0.1');
+  await new Promise(r=>server.once('listening',r));
+  const url=`http://127.0.0.1:${server.address().port}/frontend/`;
+  let dom; let allow=false; let prompts=0; let sent; let downloaded=false;
+  try {
+    dom=await JSDOM.fromURL(url,{resources:'usable',runScripts:'dangerously',beforeParse(w){
+      w.confirm=()=>{prompts++;return allow;};
+      w.HTMLElement.prototype.scrollIntoView=function(){};
+      w.URL.createObjectURL=()=>{downloaded=true;return 'blob:test';};w.URL.revokeObjectURL=()=>{};
+      w.HTMLAnchorElement.prototype.click=function(){};
+      w.fetch=(path,options)=>{
+        if(String(path).endsWith('exports/submission')) {sent=JSON.parse(options.body);return Promise.resolve({ok:true,json:async()=>({results:[{status:'ok'},{status:'error'}]})});}
+        return fetch(new URL(path,url),options);
+      };
+    }});
+    const d=dom.window.document;
+    const button=t=>[...d.querySelectorAll('button')].find(b=>b.textContent===t);
+    await until(()=>button('Скачать results.json'));
+    button('Чек-листы').click();await until(()=>button('Сохранить новую версию'));
+    const name=[...d.querySelectorAll('label')].find(l=>l.firstChild.textContent==='Название чек-листа').querySelector('input');
+    name.value='Несохранённое имя';name.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+    button('Диалоги').click();await until(()=>prompts===1);
+    assert.equal(dom.window.location.hash,'#checklists');assert.equal(name.value,'Несохранённое имя');
+    const unload=new dom.window.Event('beforeunload',{cancelable:true});dom.window.dispatchEvent(unload);assert.equal(unload.defaultPrevented,true);
+    button('Сохранить новую версию').click();await until(()=>d.body.textContent.includes('Сохранена версия'));
+    button('Диалоги').click();await until(()=>button('Скачать results.json'));assert.equal(prompts,1);
+    button('Скачать results.json').click();await until(()=>downloaded);
+    assert.equal(sent.dataset,'dev');assert.equal(sent.group_id,'DEV');assert.ok(sent.checklist_version);
+    assert.match(d.body.textContent,/Ошибок: 1/);assert.match(d.body.textContent,/Файл неполный/);
+    assert.equal(d.querySelector('a[download="evaluations.csv"]').getAttribute('href'),'../api/exports/evaluations.csv');
+  } finally {dom?.window.close();await new Promise(r=>server.close(r));store.db.close();}
+});

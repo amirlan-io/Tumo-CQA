@@ -49,9 +49,22 @@
     add(select, "option", label).value = value;
   }
 
+  let currentPage = 'dialogs';
+  let readDraft = null;
+  let savedDraft = '';
+  const isDirty = () => readDraft && readDraft() !== savedDraft;
+  function leaveEditor() {
+    return !isDirty() || window.confirm('Есть несохранённые изменения. Уйти без сохранения?');
+  }
+  window.addEventListener('beforeunload', event => {
+    if (isDirty()) { event.preventDefault(); event.returnValue = ''; }
+  });
   function navigate(page) {
+    if (!leaveEditor()) { history.replaceState(null, '', '#' + currentPage); return; }
+    readDraft = null;
     if (!pages[page]) page = "dialogs";
     if (location.hash !== "#" + page) history.pushState(null, "", "#" + page);
+    currentPage = page;
     const view = document.createElement("div");
     stopAudio(content);
     content.replaceChildren(view);
@@ -235,6 +248,28 @@
       await api.importJson({ group_id: groupId, records });
       await refresh(groupId);
     });
+    const exportsPanel = add(view, 'details');
+    add(exportsPanel, 'summary', 'Скачать результаты');
+    const csv = add(exportsPanel, 'a', 'Скачать все оценки CSV');
+    csv.href = '../api/exports/evaluations.csv'; csv.download = 'evaluations.csv';
+    const dataset = field(exportsPanel, 'Набор для сдачи', 'select');
+    option(dataset, 'dev', 'DEV · 65 диалогов'); option(dataset, 'prod', 'Контрольный · 10 чатов');
+    const exportVersion = field(exportsPanel, 'Версия для JSON-экспорта', 'select');
+    const exportLists = await api.checklists();
+    for (const item of exportLists) for (const v of await api.versions(item.id))
+      option(exportVersion, v.id, v.name + ' · v' + v.version);
+    const modelName = field(exportsPanel, 'Модель для экспорта', 'input', 'stealth/crouton-alpha');
+    add(exportsPanel, 'p', 'Используется группа из поля выше. Официальный формат требует исходную рубрику. CSV содержит все сохранённые оценки.');
+    const exportStatus = add(exportsPanel, 'p'); exportStatus.setAttribute('role', 'status');
+    button(exportsPanel, 'Скачать results.json', async () => {
+      exportStatus.textContent = '';
+      const data = await api.exportSubmission({dataset:dataset.value,group_id:group.value.trim(),checklist_version:exportVersion.value,model:modelName.value.trim(),mode:'external_api',team_name:'Tumo'});
+      const errors = data.results.filter(r => r.status !== 'ok').length;
+      exportStatus.textContent = 'Записей: ' + data.results.length + '. Ошибок: ' + errors + (errors ? '. Файл неполный: завершите оценки перед сдачей.' : '. Все оценки готовы.');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+      const link = add(exportsPanel,'a'); link.href=url; link.download='results.json'; link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url),1000);
+    });
     const summary = add(view, "div");
     summary.className = "cqa-summary";
     const list = add(view, "div");
@@ -374,13 +409,22 @@
           if (range) evidence(coach, Array.from({ length: range.to - range.from + 1 }, (_, i) => range.from + i),
             rows, "Проверенный участок · " + range.from + "–" + range.to);
           else evidence(coach, original.evidence_message_nos, rows);
-          const deadline = /^Срок ответа\./i.test(criterion.text);
-          const phrases = {
-            RU: deadline ? "По вашей заявке ответ поступит до [подтверждённые дата и время]." : "Я уточню информацию по вашему вопросу. [Проверенный ответ или согласованный следующий шаг]. Остались ли у вас вопросы?",
-            KZ: deadline ? "Өтініміңізге жауап [расталған күн мен уақыт] дейін беріледі." : "Сұрағыңыз бойынша ақпаратты нақтылаймын. [Тексерілген жауап немесе келісілген келесі қадам]. Қосымша сұрақтарыңыз бар ма?",
-            EN: deadline ? "You’ll receive an answer to your request by [confirmed date and time]." : "Let me clarify the information about your question. [Verified answer or agreed next step]. Do you have any other questions?"
-          };
-          add(coach, "p", "Учебный пример · " + (phrases[record.language] || phrases.RU));
+          const templates = [
+            [/^Установление контакта\s*:/i, ['Здравствуйте! Меня зовут [имя оператора]. Чем могу помочь?', 'Сәлеметсіз бе! Менің атым [оператордың аты]. Қалай көмектесе аламын?', 'Hello! My name is [operator name]. How can I help?']],
+            [/^Выявление потребности\s*:/i, ['Правильно ли я понял, что вам нужно [запрос клиента]? Уточните, пожалуйста, [недостающая деталь].', 'Сізге [клиенттің сұрауы] қажет екенін дұрыс түсіндім бе? [Жетіспейтін мәліметті] нақтылаңызшы.', 'Have I understood correctly that you need [customer request]? Could you clarify [missing detail]?']],
+            [/^Идентификация\s*:/i, ['Перед обсуждением персональных данных необходимо пройти проверку личности по утверждённой процедуре компании. Не отправляйте пароль или код подтверждения в чат.', 'Жеке деректерді талқыламас бұрын компания бекіткен сәйкестендіру рәсімінен өту қажет. Құпиясөзді немесе растау кодын чатқа жібермеңіз.', 'Before discussing personal information, please follow the company-approved identity verification process. Do not send passwords or verification codes in chat.']],
+            [/^Корректная и полная консультация/i, ['По вашему вопросу: [проверенный ответ]. Следующий шаг: [подтверждённое действие]. Если информации недостаточно, я уточню её перед ответом.', 'Сұрағыңыз бойынша: [тексерілген жауап]. Келесі қадам: [расталған әрекет]. Ақпарат жеткіліксіз болса, жауап бермес бұрын нақтылаймын.', 'Regarding your question: [verified answer]. The next step is [confirmed action]. If information is missing, I will clarify it before answering.']],
+            [/^Эмпатия\s*:/i, ['Понимаю, что [конкретная ситуация] вызывает неудобство. Давайте разберёмся, чем я могу помочь.', '[Нақты жағдай] қолайсыздық тудыратынын түсінемін. Қалай көмектесе алатынымды бірге қарастырайық.', 'I understand that [specific situation] is inconvenient. Let us look at how I can help.']],
+            [/^Управление диалогом/i, ['Сначала [первый проверенный шаг], затем [следующий шаг]. Если понадобится время на уточнение, сообщу об этом. Уже допущенную задержку нельзя исправить новой репликой.', 'Алдымен [бірінші тексерілген қадам], содан кейін [келесі қадам]. Нақтылауға уақыт қажет болса, хабарлаймын. Өткен кідірісті жаңа хабарламамен түзету мүмкін емес.', 'First, [verified first step], then [next step]. I will let you know if clarification takes time. A new reply cannot undo an earlier delay.']],
+            [/^Завершение\s*:/i, ['Удалось ли решить ваш вопрос? Если нужна дополнительная помощь, я готов помочь. Всего доброго!', 'Мәселеңіз шешілді ме? Қосымша көмек қажет болса, көмектесуге дайынмын. Сау болыңыз!', 'Has your issue been resolved? Please let me know if you need any further help. Goodbye!']],
+            [/^Срок ответа\./i, ['Ответ поступит до [подтверждённые дата и время].', 'Жауап [расталған күн мен уақыт] дейін беріледі.', 'You will receive an answer by [confirmed date and time].']]
+          ];
+          const languageIndex = {RU:0,KZ:1,EN:2}[record.language] ?? 0;
+          const template = templates.find(([pattern]) => pattern.test(criterion.text));
+          const guidance = criterion.is_gross_error
+            ? 'Требуется проверка руководителем: прекратите нарушение и действуйте по регламенту. Вежливая реплика не отменяет уже совершённое нарушение.'
+            : template ? template[1][languageIndex] : 'Для изменённого правила готового шаблона нет. Составьте ответ по формулировке критерия и проверьте его с руководителем.';
+          add(coach, "p", "Учебный пример · " + guidance);
           add(coach, 'p', 'Это учебный шаблон, не новый ответ модели. Заполните скобки только проверенными сведениями; не обещайте неподтверждённые сроки и условия.');
         }
         const appealForm = add(card, "details");
@@ -475,11 +519,14 @@
     button(createPanel, 'Создать на основе текущего', async () => {
       if (!lists.length) throw new Error('Нет начального чек-листа');
       const source = lists.find(list => list.id === chooser.value);
+      if (!leaveEditor()) return;
       const created = await api.createChecklist({ ...source.latest_version, name: newName.value });
+      readDraft = null;
       selectedChecklistId = created.checklist_id;
       await navigate('checklists');
     });
     function renderSelected() {
+      readDraft = null;
       editor.replaceChildren();
       const list = lists.find(list => list.id === chooser.value);
       if (!list) return;
@@ -508,7 +555,7 @@
       const criteriaPanel = add(panel, "div");
       function updateMeter() {
         const sum = readCriteria.reduce((n, read) => n + (read().weight ?? 0), 0);
-        meter.textContent = 'Критериев: ' + readCriteria.length + ' · Сумма весов: ' + sum + ' / 100' + (Math.abs(sum - 100) < .000001 ? ' · Можно сохранять' : ' · Скорректируйте веса');
+        meter.textContent = 'Критериев: ' + readCriteria.length + ' · Сумма весов: ' + sum + ' / 100' + (Math.abs(sum - 100) < .000001 ? ' · Веса сбалансированы' : ' · Скорректируйте веса');
         meter.dataset.valid = String(Math.abs(sum - 100) < .000001);
       }
       function appendCriterion(criterion) {
@@ -594,13 +641,16 @@
         }
         if (Math.abs(criteria.reduce((sum, c) => sum + c.weight, 0) - 100) > .000001) throw new Error('Сумма весов должна быть 100');
         const version = await api.saveVersion(list.id, { name: name.value, criteria });
+        savedDraft = readDraft();
         list.latest_version = version;
         chooser.selectedOptions[0].textContent = version.name;
         panel.querySelector('h2').textContent = 'Редактирование версии ' + version.version;
         saved.textContent = "Сохранена версия " + version.version + ". Её можно выбрать в «Диалогах».";
       });
+      readDraft = () => JSON.stringify({name:name.value, criteria:readCriteria.map(read => read())});
+      savedDraft = readDraft();
     }
-    chooser.addEventListener('change', () => { selectedChecklistId = chooser.value; renderSelected(); });
+    chooser.addEventListener('change', () => { if (!leaveEditor()) { chooser.value = selectedChecklistId; return; } selectedChecklistId = chooser.value; renderSelected(); });
     renderSelected();
   }
 

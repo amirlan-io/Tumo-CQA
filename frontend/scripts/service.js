@@ -12,6 +12,7 @@ window.CqaService = (() => {
   }
 
   return {
+    exportSubmission: body => request("exports/submission", body),
     conversations: () => request("conversations"),
     importJson: body => request('import', body),
     conversation: id => request("conversations/" + id),
