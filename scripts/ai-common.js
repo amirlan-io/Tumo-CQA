@@ -138,9 +138,9 @@ export async function loadAi() {
   try { ai = await import('../server/services/ai.js'); } catch {
     throw new CliError('Не удалось загрузить server/services/ai.js. Нужен готовый AI-модуль и корректные AI_* настройки.');
   }
-  if (!text(ai.model) || ai.prompt_version !== 'v1' || typeof ai.evaluateDialogue !== 'function'
+  if (!text(ai.model) || !text(ai.prompt_version) || typeof ai.evaluateDialogue !== 'function'
     || typeof ai.createEvaluator !== 'function')
-    throw new CliError('AI-модуль должен экспортировать model, prompt_version=v1, evaluateDialogue и createEvaluator.');
+    throw new CliError('AI-модуль должен экспортировать model, prompt_version, evaluateDialogue и createEvaluator.');
   return ai;
 }
 

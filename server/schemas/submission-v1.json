@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CQA official results 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "team_name", "model", "results"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "team_name": { "$ref": "#/definitions/nonemptyString" },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "name"],
+      "properties": {
+        "mode": { "enum": ["local", "external_api", "hybrid"] },
+        "name": { "$ref": "#/definitions/nonemptyString" }
+      }
+    },
+    "results": {
+      "type": "array",
+      "oneOf": [
+        { "minItems": 65, "maxItems": 65 },
+        { "minItems": 10, "maxItems": 10 }
+      ],
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/okResult" },
+          { "$ref": "#/definitions/errorResult" }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "nonemptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["criterion_id", "value", "rationale", "evidence_turns"],
+      "properties": {
+        "criterion_id": {
+          "enum": ["contact", "discovery", "identification", "consultation", "empathy", "dialogue", "closure", "critical"]
+        },
+        "value": { "enum": [true, false, null, 0, 4, 5, 7, 10, 15, 20] },
+        "rationale": { "$ref": "#/definitions/nonemptyString" },
+        "evidence_turns": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "criterion_id": { "enum": ["contact", "empathy", "critical"] } } },
+          "then": { "properties": { "value": { "type": "boolean" } } }
+        },
+        {
+          "if": { "properties": { "criterion_id": { "enum": ["discovery", "identification", "closure"] } } },
+          "then": { "properties": { "value": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] } } }
+        },
+        {
+          "if": { "properties": { "criterion_id": { "const": "consultation" } } },
+          "then": { "properties": { "value": { "enum": [0, 5, 10, 15, 20, null] } } }
+        },
+        {
+          "if": { "properties": { "criterion_id": { "const": "dialogue" } } },
+          "then": { "properties": { "value": { "enum": [0, 4, 7, 10] } } }
+        }
+      ]
+    },
+    "okResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversation_id", "status", "criteria", "score"],
+      "properties": {
+        "conversation_id": { "$ref": "#/definitions/nonemptyString" },
+        "status": { "const": "ok" },
+        "criteria": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/criterion" }
+        },
+        "score": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["final_score", "critical_flag"],
+          "properties": {
+            "final_score": { "type": "number", "minimum": 0, "maximum": 100 },
+            "critical_flag": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "errorResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversation_id", "status", "criteria", "score", "error"],
+      "properties": {
+        "conversation_id": { "$ref": "#/definitions/nonemptyString" },
+        "status": { "const": "error" },
+        "criteria": { "type": "array", "maxItems": 0 },
+        "score": { "type": "null" },
+        "error": { "$ref": "#/definitions/nonemptyString" }
+      }
+    }
+  }
+}

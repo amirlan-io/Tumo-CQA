@@ -4,9 +4,11 @@ import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { prepareInput, createOutputContract } from './ai-contract.js';
 
-export const prompt_version = 'v1';
+export const prompt_version = process.env.AI_PROMPT_VERSION || 'v1';
 export const model = process.env.AI_MODEL || 'stealth/crouton-alpha';
-const prompt = readFileSync(new URL('../prompts/evaluate-v1.txt', import.meta.url), 'utf8');
+export const supportedPromptVersions = Object.freeze(['v1', 'v2', 'v3']);
+const prompts = Object.freeze(Object.fromEntries(supportedPromptVersions.map(version => [version,
+  readFileSync(new URL(`../prompts/evaluate-${version}.txt`, import.meta.url), 'utf8')])));
 const fail = (code, message, status = 502) => Object.assign(new Error(message), { code, status, timeout: code === 'AI_TIMEOUT' });
 const integer = (value, fallback) => value === undefined ? fallback : Number(value);
 
@@ -15,6 +17,7 @@ export function createEvaluator(options = {}) {
     apiKey: options.apiKey ?? process.env.AI_API_KEY,
     baseUrl: options.baseUrl ?? process.env.AI_BASE_URL ?? 'https://openrouter.ai/api/v1',
     model: options.model ?? model,
+    promptVersion: options.promptVersion ?? prompt_version,
     timeoutMs: integer(options.timeoutMs ?? process.env.AI_TIMEOUT_MS, 55000),
     requestTimeoutMs: integer(options.requestTimeoutMs ?? process.env.AI_REQUEST_TIMEOUT_MS, 35000),
     maxTokens: integer(options.maxTokens ?? process.env.AI_MAX_TOKENS, 4096),
@@ -30,10 +33,11 @@ export function createEvaluator(options = {}) {
     if (typeof config.apiKey !== 'string' || !config.apiKey.trim()) {
       throw fail('AI_CONFIG', 'Не задан AI_API_KEY в .env. Оценка модели не выполнялась.', 503);
     }
-    if (!config.model || !['json_schema', 'json_object'].includes(config.structuredOutput)
+    if (!config.model || !supportedPromptVersions.includes(config.promptVersion)
+      || !['json_schema', 'json_object'].includes(config.structuredOutput)
       || ![config.timeoutMs, config.requestTimeoutMs, config.maxTokens].every(n => Number.isSafeInteger(n) && n > 0)
       || config.timeoutMs > 55000 || typeof config.diagnosticDir !== 'string' || !config.diagnosticDir.trim()) {
-      throw fail('AI_CONFIG', 'Некорректные настройки ИИ. Общий тайм-аут должен быть не больше 55000 мс.', 503);
+      throw fail('AI_CONFIG', 'Некорректные настройки ИИ: промпт v1/v2/v3; общий тайм-аут не больше 55000 мс.', 503);
     }
     let endpoint;
     try {
@@ -49,7 +53,7 @@ export function createEvaluator(options = {}) {
     const totalSignal = AbortSignal.timeout(config.timeoutMs);
     const combined = signal ? AbortSignal.any([signal, totalSignal]) : totalSignal;
     const messages = [
-      { role: 'system', content: prompt },
+      { role: 'system', content: prompts[config.promptVersion] },
       { role: 'user', content: JSON.stringify(input) }
     ];
     // Redact even an accidentally echoed credential before it reaches disk or repair context.
@@ -58,7 +62,7 @@ export function createEvaluator(options = {}) {
       const diagnosticId = `${evaluationId}-${attempt}`;
       const diagnostic = { diagnostic_id: diagnosticId, created_at: new Date().toISOString(),
         conversation_id: input.conversation.conversation_id, checklist_version: input.checklist_version.id,
-        model: config.model, prompt_version, attempt, elapsed_ms: Math.round(performance.now() - started), ...details };
+        model: config.model, prompt_version: config.promptVersion, attempt, elapsed_ms: Math.round(performance.now() - started), ...details };
       const persist = (async () => {
         const directory = resolve(config.diagnosticDir);
         await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -88,7 +92,7 @@ export function createEvaluator(options = {}) {
       const body = {
         model: config.model, messages, stream: false, temperature: 0, max_tokens: config.maxTokens,
         response_format: config.structuredOutput === 'json_schema'
-          ? { type: 'json_schema', json_schema: { name: 'dialogue_evaluation_v1', strict: true, schema: contract.schema } }
+          ? { type: 'json_schema', json_schema: { name: `dialogue_evaluation_${config.promptVersion}`, strict: true, schema: contract.schema } }
           : { type: 'json_object' }
       };
       if (endpoint.hostname === 'openrouter.ai') {
@@ -140,7 +144,7 @@ export function createEvaluator(options = {}) {
           if (!errors.length) {
             await record(attempt, { status: 'valid', http_status: response.status, resolved_model: envelope.model ?? null, raw_response: raw });
             if (combined.aborted) throw fail(signal?.aborted ? 'AI_CANCELLED' : 'AI_TIMEOUT', 'Оценка ИИ отменена или превышено время ожидания.', signal?.aborted ? 499 : 504);
-            return { model: config.model, prompt_version, results: parsed.results };
+            return { model: config.model, prompt_version: config.promptVersion, results: parsed.results };
           }
         }
       }
