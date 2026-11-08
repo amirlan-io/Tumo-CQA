@@ -78,7 +78,7 @@ async function records(ctx, count = 1) {
     if (files.length >= count) {
       const entries = await Promise.all(files.map(async name => {
         const path = join(ctx.diagnosticDir, name), raw = await readFile(path, 'utf8');
-        assert.equal((await stat(path)).mode & 0o777, 0o600);
+        if (process.platform !== 'win32') assert.equal((await stat(path)).mode & 0o777, 0o600);
         assert.ok(!raw.includes(KEY));
         const record = JSON.parse(raw);
         assert.equal(name, `${record.diagnostic_id}.json`);
@@ -464,8 +464,8 @@ test('diagnostics are atomic 0600 files in new 0700 directories, with plain and 
     assert.ok(!log.raw.includes(form));
   }
   assert.ok(log.record.raw_response.includes('[REDACTED]'));
-  assert.equal((await stat(ctx.diagnosticDir)).mode & 0o777, 0o700);
-  assert.equal((await stat(join(ctx.directory, 'new-private'))).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') assert.equal((await stat(ctx.diagnosticDir)).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') assert.equal((await stat(join(ctx.directory, 'new-private'))).mode & 0o777, 0o700);
   assert.deepEqual(await readdir(ctx.diagnosticDir), [`${result.attempts[0].diagnostic_id}.json`]);
 });
 

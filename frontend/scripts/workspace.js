@@ -3,6 +3,38 @@
   const root = document.querySelector("#cqa-app");
   const content = root.querySelector("#cqa-content");
   const status = root.querySelector("#cqa-status");
+  const menuToggle = root.querySelector('#cqa-menu-toggle');
+  function setMenuHidden(hidden, animate = false) {
+    const panel = root.querySelector('#cqa-sidebar');
+    const beforeColumns = getComputedStyle(root).gridTemplateColumns;
+    const beforeHeight = panel.getBoundingClientRect().height;
+    const beforeTransform = getComputedStyle(panel).transform;
+    root.getAnimations().forEach(animation => animation.cancel());
+    panel.getAnimations().forEach(animation => animation.cancel());
+    root.classList.toggle('cqa-menu-hidden', hidden);
+    const sidebar = root.querySelector('#cqa-sidebar');
+    sidebar.inert = hidden;
+    sidebar.setAttribute('aria-hidden', String(hidden));
+    if (animate && typeof panel.animate === 'function') {
+      const timing = {duration:420,easing:'cubic-bezier(.22,.61,.36,1)'};
+      if (window.matchMedia('(min-width:48rem)').matches) {
+        root.animate([{gridTemplateColumns:beforeColumns},{gridTemplateColumns:getComputedStyle(root).gridTemplateColumns}],timing);
+        panel.animate([{transform:beforeTransform},{transform:hidden?'translateX(-100%)':'translateX(0)'}],timing);
+      } else {
+        panel.animate([{height:beforeHeight+'px'},{height:panel.getBoundingClientRect().height+'px'}],timing);
+      }
+    }
+
+    menuToggle.setAttribute('aria-expanded', String(!hidden));
+    const label = hidden ? 'Показать меню' : 'Скрыть меню';
+    menuToggle.setAttribute('aria-label', label);
+    menuToggle.title = label;
+    menuToggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path d="' + (hidden ? 'm13 9 3 3-3 3' : 'm16 9-3 3 3 3') + '"/></svg>';
+    try { localStorage.setItem('cqa-menu-hidden', String(hidden)); } catch {}
+  }
+  menuToggle.addEventListener('click', () => setMenuHidden(!root.classList.contains('cqa-menu-hidden'), true));
+  try { setMenuHidden(localStorage.getItem('cqa-menu-hidden') === 'true'); } catch {}
+
   const pages = {
     dialogs: ["Диалоги", "Загружай диалоги, проверяй оценки и переходи к репликам с доказательствами.", dialogs],
     checklists: ["Чек-листы", "Настраивай критерии, веса и шкалы. Сохраняй изменения отдельной версией.", checklists],
@@ -234,9 +266,11 @@
     const evaluatePanel = add(controls, 'div');
     const demoPanel = add(toolbar, 'div'); demoPanel.className = 'cqa-demo-controls';
     const group = field(importPanel, "Идентификатор группы", "input", "DEV");
-    const upload = field(demoPanel, 'Загрузить транскрипт из JSON', 'input');
+    const uploadPanel = add(demoPanel, 'details');
+    add(uploadPanel, 'summary', 'Импортировать файл JSON');
+    const upload = field(uploadPanel, 'Загрузить транскрипт из JSON', 'input');
     upload.type = 'file'; upload.accept = '.json,application/json';
-    button(demoPanel, 'Импортировать JSON', async () => {
+    button(uploadPanel, 'Импортировать JSON', async () => {
       const file = upload.files[0];
       if (!file) throw new Error('Выберите JSON-файл');
       if (file.size > 5 * 1024 * 1024) throw new Error('Файл должен быть не больше 5 МБ');
@@ -256,7 +290,7 @@
     option(dataset, 'dev', 'DEV · 65 диалогов'); option(dataset, 'prod', 'Контрольный · 10 чатов');
     const exportVersion = field(exportsPanel, 'Версия для JSON-экспорта', 'select');
     const exportLists = await api.checklists();
-    for (const item of exportLists) for (const v of await api.versions(item.id))
+    for (const item of exportLists.filter(c => !['Тест','QA · проверка защиты'].includes(c.latest_version.name))) for (const v of await api.versions(item.id))
       option(exportVersion, v.id, v.name + ' · v' + v.version);
     const modelName = field(exportsPanel, 'Модель для экспорта', 'input', 'stealth/crouton-alpha');
     add(exportsPanel, 'p', 'Используется группа из поля выше. Официальный формат требует исходную рубрику. CSV содержит все сохранённые оценки.');
@@ -288,7 +322,7 @@
       list.replaceChildren();
       stopAudio(details);
       details.replaceChildren();
-      const visible = records.filter(record => !groupId || record.group_id === groupId);
+      const visible = records.filter(record => groupId ? record.group_id === groupId : record.group_id !== 'DEMO' && !record.group_id.startsWith('QA-'));
       summary.replaceChildren();
       [['Все диалоги', visible.length], ['Чаты', visible.filter(c => c.channel === 'agent chat').length], ['Звонки', visible.filter(c => c.channel === 'voice call').length]].forEach(([label, count]) => {
         const card = add(summary, 'div'); add(card, 'span', label); add(card, 'strong', String(count));
@@ -308,12 +342,15 @@
       await api.importGroup(id);
       await refresh(id);
     });
-    button(demoPanel, "Загрузить вымышленный диалог", async () => {
+    const demoTools = add(demoPanel, 'details');
+    add(demoTools, 'summary', 'Учебный режим');
+    add(demoTools, 'p', 'Вымышленные данные для тренировки. Они не входят в официальную выгрузку.');
+    button(demoTools, "Загрузить вымышленный диалог", async () => {
       await api.importDemo();
       await refresh("DEMO");
     }).classList.add("cqa-secondary");
     const batchVersions = field(evaluatePanel, 'Чек-лист для оценки группы', 'select');
-    (await api.checklists()).forEach(c => option(batchVersions, c.latest_version.id, c.latest_version.name + ' · v' + c.latest_version.version));
+    (await api.checklists()).filter(c => !['Тест','QA · проверка защиты'].includes(c.latest_version.name)).forEach(c => option(batchVersions, c.latest_version.id, c.latest_version.name + ' · v' + c.latest_version.version));
     const batchStatus = add(toolbar, 'div');
     const conversationNames = new Map((await api.conversations()).map(c => [c.id, c.conversation_id]));
     async function monitorBatch(id) {
@@ -335,7 +372,7 @@
       await monitorBatch(batch.id);
     });
     const savedBatches = await api.batches();
-    savedBatches.slice(-5).reverse().forEach(batch => button(toolbar, 'Пакет ' + batch.group_id + ' · ' + jobLabels[batch.status], () => monitorBatch(batch.id)));
+    savedBatches.filter(batch => batch.group_id !== 'DEMO' && !batch.group_id.startsWith('QA-')).slice(-5).reverse().forEach(batch => button(toolbar, 'Пакет ' + batch.group_id + ' · ' + jobLabels[batch.status], () => monitorBatch(batch.id)));
     await refresh();
   }
 
@@ -478,7 +515,9 @@
         if (evaluation.checklist_version === versionSelect.value) show(evaluation);
       }
     });
-    button(actions, "Заполнить оценку вручную", editAnswers);
+    const manualTools = add(actions, 'details');
+    add(manualTools, 'summary', 'Ручная оценка');
+    button(manualTools, "Заполнить оценку вручную", editAnswers);
     if (record.group_id === "DEMO" && record.conversation_id === "DEMO-001") {
       button(actions, "Запустить оценку на вымышленных ответах", async () => {
         const version = versions.find(item => item.id === versionSelect.value);
@@ -504,7 +543,7 @@
 
   let selectedChecklistId = null;
   async function checklists(view) {
-    const lists = await api.checklists();
+    const lists = (await api.checklists()).filter(c => !['Тест','QA · проверка защиты'].includes(c.latest_version.name));
     const chooser = field(view, 'Выберите чек-лист', 'select');
     lists.forEach(list => option(chooser, list.id, list.latest_version.name));
     chooser.value = lists.some(list => list.id === selectedChecklistId) ? selectedChecklistId : lists[0]?.id || '';

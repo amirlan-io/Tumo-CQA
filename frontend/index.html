@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tumo · CQA</title>
-  <link rel="stylesheet" href="./styles/cqa.css">
+  <link rel="stylesheet" href="./styles/cqa.css?v=cleanup-1">
   <script defer src="./scripts/mock-data.js"></script>
   <script defer src="./scripts/service.js"></script>
-  <script defer src="./scripts/workspace.js"></script>
+  <script defer src="./scripts/workspace.js?v=cleanup-1"></script>
 </head>
 <body>
   <main id="cqa-app">
-    <aside class="cqa-sidebar">
-      <div class="cqa-brand"><span aria-hidden="true">F</span><div><strong>Tumo · CQA</strong><small>Conversation Quality Analytics</small></div></div>
+    <aside class="cqa-sidebar" id="cqa-sidebar">
+      <div class="cqa-brand"><img class="cqa-freedom-logo" src="./assets/freedom-logo.png" alt="Freedom Broker"><div><strong>Tumo · CQA</strong><small>Conversation Quality Analytics</small></div></div>
       <p class="cqa-nav-label">РАБОЧАЯ ОБЛАСТЬ</p>
       <nav aria-label="Разделы">
         <button type="button" data-page="dialogs" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Диалоги</button>
@@ -23,6 +23,7 @@
     </aside>
     <div class="cqa-main">
       <header class="cqa-page-header">
+        <button type="button" id="cqa-menu-toggle" class="cqa-secondary" aria-controls="cqa-sidebar" aria-expanded="true">☰ Скрыть меню</button>
         <p class="cqa-eyebrow">КОНТРОЛЬ КАЧЕСТВА</p>
         <h1 id="cqa-page-title">Диалоги</h1>
         <p id="cqa-page-description">Загружай диалоги, проверяй оценки и переходи к репликам с доказательствами.</p>

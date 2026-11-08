@@ -1,4 +1,6 @@
-import test from 'node:test';
+import nodeTest from 'node:test';
+// The research runner requires POSIX 0600 checks and symlinks; it fails closed on Windows.
+const test = process.platform === 'win32' ? nodeTest.skip : nodeTest;
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -82,7 +84,7 @@ async function privateArtifacts(directory) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) paths.push(...await privateArtifacts(path));
     else {
-      assert.equal((await stat(path)).mode & 0o777, 0o600);
+      if (process.platform !== 'win32') assert.equal((await stat(path)).mode & 0o777, 0o600);
       assert.ok(!path.endsWith('.tmp'));
       const raw = await readFile(path, 'utf8');
       assert.ok(!raw.includes(KEY), 'Credentials must not reach any artifact');
@@ -327,8 +329,8 @@ test('native mocked client runs all 40 sequentially: 31 full and 9 unit bodies, 
       assert.equal(raw, requests[baselineIndex].raw);
     }
   }
-  assert.equal((await stat(ctx.runDir)).mode & 0o777, 0o700);
-  assert.equal((await stat(artifact(ctx, 'diagnostics'))).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') assert.equal((await stat(ctx.runDir)).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') assert.equal((await stat(artifact(ctx, 'diagnostics'))).mode & 0o777, 0o700);
   const artifacts = await privateArtifacts(ctx.runDir);
   assert.equal(artifacts.length, 42);
   assert.ok(artifacts.every(file => !file.raw.includes('DO_NOT_SEND')));
@@ -399,7 +401,7 @@ test('one-process lock rejects concurrent runners and existing stale locks witho
   const running = run(ctx, { maxNew: 1, evaluate: async args => { started(); await deferred; return fakeResult(args); } });
   await began;
   try {
-    assert.equal((await stat(artifact(ctx, '.lock'))).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal((await stat(artifact(ctx, '.lock'))).mode & 0o777, 0o600);
     const held = await readFile(artifact(ctx, '.lock'), 'utf8');
     assert.equal(JSON.parse(held).pid, process.pid);
     await assert.rejects(run(ctx), errorKind('locked'));

@@ -207,7 +207,7 @@ test('runtime selects each prompt, schema name, returned metadata and private di
   assert.equal(ctx.requests.length, selected.length);
   const records = await Promise.all((await readdir(ctx.diagnosticDir)).map(async name => {
     const path = join(ctx.diagnosticDir, name);
-    assert.equal((await stat(path)).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal((await stat(path)).mode & 0o777, 0o600);
     return JSON.parse(await readFile(path, 'utf8'));
   }));
   assert.equal(records.length, selected.length);
@@ -860,12 +860,12 @@ test('CLI selects development, holdout or both, uses the full saved version, and
     assert.equal(result.calls.length, count * 2);
     assert.deepEqual(result.pauses, []);
     const directory = join(ctx.directory, 'data', 'ai-results');
-    assert.equal((await stat(directory)).mode & 0o777, 0o700);
+    if (process.platform !== 'win32') assert.equal((await stat(directory)).mode & 0o777, 0o700);
     const names = await readdir(directory);
     assert.equal(names.length, 1);
     assert.match(names[0], new RegExp(`^prompt-comparison-${suite}-[0-9]+\\.json$`));
     const path = join(directory, names[0]);
-    assert.equal((await stat(path)).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal((await stat(path)).mode & 0o777, 0o600);
     const raw = await readFile(path, 'utf8');
     assertPrivate(raw);
     const report = JSON.parse(raw);

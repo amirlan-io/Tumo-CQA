@@ -205,8 +205,8 @@ test('maxNew checkpoints every completion privately, resumes only pending IDs an
     const checkpoint = JSON.parse(readFileSync(ctx.options.journalPath, 'utf8'));
     assert.equal(checkpoint.entries.length, row.completed);
     assert.equal(checkpoint.entries.find(entry => entry.conversation_id === row.conversation_id).status, row.status);
-    assert.equal(statSync(ctx.options.journalPath).mode & 0o777, 0o600);
-    assert.equal(statSync(`${ctx.options.journalPath}.lock`).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal(statSync(ctx.options.journalPath).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal(statSync(`${ctx.options.journalPath}.lock`).mode & 0o777, 0o600);
     assert.equal(row.total, 10);
     assert.equal(row.attempts, 1);
     assert.ok(Number.isFinite(row.latency_ms) && row.latency_ms >= 0);
@@ -547,7 +547,7 @@ test('private journal rejects an echoed API key without committing the output, a
   await assert.rejects(prepareResults({ ...ctx.options, maxNew: 1, evaluateFactory }), { kind: 'invalid_output' });
   assertSafe(await readFile(ctx.options.journalPath, 'utf8'));
   assert.deepEqual((await journalAt(ctx)).entries, []);
-  assert.equal((await stat(ctx.options.journalPath)).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal((await stat(ctx.options.journalPath)).mode & 0o777, 0o600);
   await noLock(ctx);
   const resumed = await prepareResults({ ...ctx.options, maxNew: 1 });
   assert.deepEqual([resumed.completed, resumed.ok, resumed.errors], [1, 1, 0]);
@@ -578,7 +578,7 @@ test('an exclusive lock prevents simultaneous runs without disturbing the active
   const checkedRun = assert.doesNotReject(running);
   try {
     await entered.promise;
-    assert.equal((await stat(`${ctx.options.journalPath}.lock`)).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal((await stat(`${ctx.options.journalPath}.lock`)).mode & 0o777, 0o600);
     const before = await readFile(ctx.options.journalPath, 'utf8');
     await assert.rejects(prepareResults({ ...ctx.options, evaluateFactory: rejectFactory }), { kind: 'filesystem' });
     assert.equal(await readFile(ctx.options.journalPath, 'utf8'), before);
@@ -608,7 +608,7 @@ test('worker failure holds the lock until other active workers settle, then rele
   try {
     await entered.promise;
     await assert.rejects(prepareResults({ ...ctx.options, evaluateFactory: rejectFactory }), { kind: 'filesystem' });
-    assert.equal((await stat(`${ctx.options.journalPath}.lock`)).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal((await stat(`${ctx.options.journalPath}.lock`)).mode & 0o777, 0o600);
   } finally { release.resolve(); await checkedFailure; }
   await noLock(ctx);
   assert.deepEqual(ids((await journalAt(ctx)).entries), [ctx.conversations[1].conversation_id]);
@@ -735,7 +735,7 @@ test('main prepare-only needs no team; partial runs never export; completed expo
   assertSafe(JSON.stringify(document));
   assertSafe(ctx.logs.join('\n'));
   assertSafe(await readFile(ctx.options.journalPath, 'utf8'));
-  assert.equal((await stat(ctx.outputPath)).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal((await stat(ctx.outputPath)).mode & 0o777, 0o600);
   assert.equal(await readFile(ctx.datasetPath, 'utf8'), datasetBefore);
   assert.equal(await readFile(ctx.versionPath, 'utf8'), versionBefore);
   await noLock(ctx);
